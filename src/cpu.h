@@ -2,6 +2,7 @@
 #define CPU_H
 
 #include <stdint.h>
+#include <stdbool.h>
 
 typedef uint8_t u8;
 typedef uint16_t u16;
@@ -18,6 +19,7 @@ extern u8 memory[MEM_SIZE];
 
 #define SET_FLAG(reg, flag)     (reg |= flag)
 #define CLEAR_FLAG(reg, flag)   (reg &= ~flag)
+#define CHECK_FLAG(reg, flag)   (reg & flag)
 
 typedef struct {
 
@@ -63,5 +65,6 @@ typedef struct {
 } CPU;
 
 void init_cpu(CPU *cpu);
+void cpu_step(CPU *cpu);
 
 #endif
