@@ -17,9 +17,9 @@ extern u8 memory[MEM_SIZE];
 #define FLAG_H (1 << 5)     // 5th bit of the F register
 #define FLAG_C (1 << 4)     // 4th bit of the F register
 
-#define SET_FLAG(reg, flag)     (reg |= flag)
-#define CLEAR_FLAG(reg, flag)   (reg &= ~flag)
-#define CHECK_FLAG(reg, flag)   (reg & flag)
+#define SET_FLAG(reg, flag)     ((reg) |= (flag))
+#define CLEAR_FLAG(reg, flag)   ((reg) &= ~(flag))
+#define CHECK_FLAG(reg, flag)   ((reg) & (flag))
 
 typedef struct {
 
