@@ -17,9 +17,10 @@ extern u8 memory[MEM_SIZE];
 #define FLAG_H (1 << 5)     // 5th bit of the F register
 #define FLAG_C (1 << 4)     // 4th bit of the F register
 
-#define SET_FLAG(reg, flag)     ((reg) |= (flag))
-#define CLEAR_FLAG(reg, flag)   ((reg) &= ~(flag))
-#define CHECK_FLAG(reg, flag)   ((reg) & (flag))
+#define SET_FLAG(reg, flag)         ((reg) |= (flag))
+#define CLEAR_FLAG(reg, flag)       ((reg) &= ~(flag))
+#define IS_FLAG_SET(reg, flag)      (((reg) & (flag)) != 0)
+#define IS_FLAG_CLEAR(reg, flag)    (((reg) & (flag)) == 0)
 
 typedef struct {
 
@@ -59,9 +60,9 @@ typedef struct {
     u16 PC;                 // Program Counter
     u64 cycles;             // CPU cycles passed
 
-    u8 ime;                 // "interrupt master enable"
-    u8 halted;
-    u8 stopped;
+    bool ime;                 // "interrupt master enable"
+    bool halted;
+    bool stopped;
 } CPU;
 
 void init_cpu(CPU *cpu);
