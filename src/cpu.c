@@ -23,6 +23,10 @@ static u8 read_byte(u16 address) {
     return memory[address];
 }
 
+static i8 read_byte_signed(u16 address) {
+    return (i8)memory[address];
+}
+
 static u16 read_word(u16 address) {
     return (read_byte(address + 1) << 8) | read_byte(address);
 }
@@ -154,6 +158,22 @@ static void execute_instruction(CPU *cpu, u8 opcode) {
             break;
         }
 
+        case 0x1A: {            // LD A, [DE]
+            cpu->cycles += 8;
+            u8 value = read_byte(cpu->DE);
+            cpu->A = value;
+            cpu->PC += 1;
+            break;
+        }
+
+        case 0x1E: {            // LD E, d8
+            cpu->cycles += 8;
+            u8 value = read_byte(cpu->PC + 1);
+            cpu->E = value;
+            cpu->PC += 2;
+            break;
+        }
+
 
 
 
@@ -247,6 +267,33 @@ static void execute_instruction(CPU *cpu, u8 opcode) {
             break;
         }
 
+        case 0x1C: {            // INC E
+            cpu->cycles += 4;
+            u8 result = cpu->E + 1;
+
+            CLEAR_FLAG(cpu->F, FLAG_Z | FLAG_N | FLAG_H);
+
+            if ((result & 0xFF) == 0) SET_FLAG(cpu->F, FLAG_Z);
+            if ((cpu->E & 0x0F) == 0x0F) SET_FLAG(cpu->F, FLAG_H);
+
+            cpu->PC += 1;
+            break;
+        }
+
+        case 0x1D: {            // DEC E
+            cpu->cycles += 4;
+            u8 result = cpu->E - 1;
+
+            CLEAR_FLAG(cpu->F, FLAG_Z | FLAG_H);
+            SET_FLAG(cpu->F, FLAG_N);
+
+            if ((result & 0xFF) == 0) SET_FLAG(cpu->F, FLAG_Z);
+            if ((cpu->E & 0x0F) == 0x10) SET_FLAG(cpu->F, FLAG_H); 
+
+            cpu->PC += 1;
+            break;
+        }
+
 
 
 
@@ -265,16 +312,12 @@ static void execute_instruction(CPU *cpu, u8 opcode) {
             cpu->cycles += 8;
             u32 result = cpu->HL + cpu->BC;
 
-            CLEAR_FLAG(cpu->F, FLAG_N);
+            CLEAR_FLAG(cpu->F, FLAG_N | FLAG_H | FLAG_C);
             if ((cpu->HL & 0xFFF) + (cpu->BC & 0xFFF) > 0xFFF)      // Half Carry
                 SET_FLAG(cpu->F, FLAG_H);
-            else
-                CLEAR_FLAG(cpu->F, FLAG_H);
         
             if (result > 0xFFFF)                                    // Carry
                 SET_FLAG(cpu->F, FLAG_C);
-            else
-                CLEAR_FLAG(cpu->F, FLAG_C);
 
             cpu->HL = (u16)result;
             cpu->PC += 1;
@@ -291,6 +334,28 @@ static void execute_instruction(CPU *cpu, u8 opcode) {
         case 0x13: {            // INC DE
             cpu->cycles += 8;
             cpu->DE += 1;
+            cpu->PC += 1;
+            break;
+        }
+
+        case 0x19: {            // ADD HL, DE
+            cpu->cycles += 8;
+            u16 result = cpu->HL + cpu->DE;
+
+            CLEAR_FLAG(cpu->F, FLAG_N | FLAG_H | FLAG_C);
+            if ((cpu->HL & 0xFFF) + (cpu->DE & 0xFFF) > 0xFFF)      // Half Carry
+                SET_FLAG(cpu->F, FLAG_H);
+        
+            if (result > 0xFFFF)                                    // Carry
+                SET_FLAG(cpu->F, FLAG_C);
+
+            cpu->PC += 1;
+            break;
+        }
+
+        case 0x1B: {            // DEC DE
+            cpu->cycles += 8;
+            cpu->DE -= 1;
             cpu->PC += 1;
             break;
         }
@@ -339,7 +404,47 @@ static void execute_instruction(CPU *cpu, u8 opcode) {
             break;
         }
 
+        case 0x1F: {            // RRA (Rotate Right Accumulator (through Carry flag))
+            cpu->cycles += 4;
+            u8 old_carry = (IS_FLAG_SET(cpu->F, FLAG_C) ? 1 : 0);
+            u8 bit0 = (cpu->A & 0x01) << 7;
+            cpu->A = (cpu->A >> 1) | old_carry;
 
+            CLEAR_FLAG(cpu->F, FLAG_Z | FLAG_N | FLAG_H | FLAG_C);
+            if (bit0) SET_FLAG(cpu->F, FLAG_C);
+
+            cpu->PC += 1;
+            break;
+        }
+
+        
+
+
+        // ============================================= //
+        //       Jumps and subroutine instructions       //
+        // ============================================= //
+
+        case 0x18: {            // JR r8
+            cpu->cycles += 12;
+            i8 offset = read_byte_signed(cpu->PC + 1);
+            cpu->PC += 2;               // Advance PC past the instuction
+            cpu->PC += offset;          // Apply the offset
+            break;
+        }
+
+        case 0x20: {            // JR NZ, r8
+            if (IS_FLAG_CLEAR(cpu->F, FLAG_Z)) {        // if Z-flag is clear move to the offset
+                cpu->cycles += 12;
+                i8 offset = read_byte_signed(cpu->PC + 1);
+                cpu->PC += 2;
+                cpu->PC += offset;
+
+            } else {                                    // else just increment cycles and PC
+                cpu->cycles += 8;
+                cpu->PC += 2;
+            }
+            break;
+        }
 
         
         default:                // Error Case
