@@ -16,6 +16,30 @@ void init_cpu(CPU *cpu) {
     cpu->cycles = 0;
 }
 
+int load_rom(const char* filename) {
+    FILE *rom_file = fopen(filename, "rb");
+    if (!rom_file) {
+        printf("Failed to open ROM file: %s\n", filename);
+        return -1;
+    }
+
+    // Read ROM into memory starting at 0x0100
+    fseek(rom_file, 0, SEEK_END);
+    long file_size = ftell(rom_file);
+    fseek(rom_file, 0, SEEK_SET);
+
+    if (file_size > MEM_SIZE) {
+        printf("ROM file too large to fit in memory.\n");
+        fclose(rom_file);
+        return -1;
+    }
+
+    fread(&memory[0x0100], 1, file_size, rom_file);
+    fclose(rom_file);
+
+    return 0;
+}
+
 // ============================================= //
 //             Read & Write Functions            //
 // ============================================= //
@@ -41,14 +65,14 @@ static void write_word(u16 address, u16 value) {
 }
 
 // executes the instruction of the given opcode (with cb prefix)
-static void execute_cb_instruction(CPU *cpu, u8 opcode) {
-    switch (opcode) {
+static void execute_cb_instruction(CPU *cpu, u8 cb_opcode) {
+    switch (cb_opcode) {
         case 0x00:
             // TODO
             break;
         
         default:                // Error Case
-            printf("Unknown opcode: 0x%02X at PC=0x%04X (CB-prefixed)\n", opcode, cpu->PC - 1);
+            printf("Unknown opcode: 0x%02X at PC=0x%04X (CB-prefixed)\n", cb_opcode, cpu->PC - 1);
             break;
     }
 }
@@ -171,6 +195,23 @@ static void execute_instruction(CPU *cpu, u8 opcode) {
             u8 value = read_byte(cpu->PC + 1);
             cpu->E = value;
             cpu->PC += 2;
+            break;
+        }
+
+        case 0x21: {            // LD HL, d16
+            cpu->cycles += 12;
+            u16 value = read_word(cpu->PC + 1);
+            cpu->HL = value;
+            cpu->PC += 3;
+            break;
+        }
+
+        case 0x22: {            // LD [HL+], A
+            cpu->cycles += 8;
+            u16 address = cpu->HL;
+            write_byte(address, cpu->A);
+            cpu->HL += 1;
+            cpu->PC += 1;
             break;
         }
 
@@ -360,6 +401,13 @@ static void execute_instruction(CPU *cpu, u8 opcode) {
             break;
         }
 
+        case 0x23: {             // INC HL
+            cpu->cycles += 8;
+            cpu->HL += 1;
+            cpu->PC += 1;
+            break;
+        }
+
         
 
 
@@ -438,7 +486,6 @@ static void execute_instruction(CPU *cpu, u8 opcode) {
                 i8 offset = read_byte_signed(cpu->PC + 1);
                 cpu->PC += 2;
                 cpu->PC += offset;
-
             } else {                                    // else just increment cycles and PC
                 cpu->cycles += 8;
                 cpu->PC += 2;

@@ -71,6 +71,7 @@ typedef struct {
 } CPU;
 
 void init_cpu(CPU *cpu);
+int load_rom(const char *filename);
 void cpu_step(CPU *cpu);
 
 #endif
