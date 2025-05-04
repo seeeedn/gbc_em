@@ -1,4 +1,5 @@
 #include "cpu.h"
+#include <stdbool.h>
 #include <stdio.h>
 
 u8 memory[MEM_SIZE] = {0};
@@ -11,6 +12,7 @@ void init_cpu(CPU *cpu) {
     cpu->SP = 0xFFFE;
     cpu->PC = 0x0100;
     cpu->ime = true;
+    cpu->ime_enable_scheduled = false;
     cpu->halted = false;
     cpu->stopped = false;
     cpu->cycles = 0;
@@ -23,7 +25,7 @@ int load_rom(const char* filename) {
         return -1;
     }
 
-    // Read ROM into memory starting at 0x0100
+    // Read ROM into memory starting at address 0x0100
     fseek(rom_file, 0, SEEK_END);
     long file_size = ftell(rom_file);
     fseek(rom_file, 0, SEEK_SET);
@@ -55,6 +57,10 @@ static u16 read_word(u16 address) {
     return (read_byte(address + 1) << 8) | read_byte(address);
 }
 
+static i16 read_word_signed(u16 address) {
+    return (i16)(read_byte(address + 1) << 8) | read_byte(address);
+}
+
 static void write_byte(u16 address, u8 value) {
     memory[address] = value;
 }
@@ -70,7 +76,7 @@ static void execute_cb_instruction(CPU *cpu, u8 cb_opcode) {
         case 0x00:
             // TODO
             break;
-        
+
         default:                // Error Case
             printf("Unknown opcode: 0x%02X at PC=0x%04X (CB-prefixed)\n", cb_opcode, cpu->PC - 1);
             break;
@@ -81,7 +87,7 @@ static void execute_cb_instruction(CPU *cpu, u8 cb_opcode) {
 static void execute_instruction(CPU *cpu, u8 opcode) {
     switch (opcode) {
         // ============================================= //
-        //           Miscellaneous instructions          //
+        //           Misc/Control instructions           //
         // ============================================= //
 
         case 0x00: {            // NOP (No operation)
@@ -92,6 +98,13 @@ static void execute_instruction(CPU *cpu, u8 opcode) {
         case 0x10: {            // STOP 0 (Stop CPU)
             cpu->cycles += 4;
             cpu->stopped = true;
+            cpu->PC += 2;
+            break;
+        }
+
+        case 0x76: {            // HALT
+            cpu->cycles += 4;
+            cpu->halted = true;
             cpu->PC += 1;
             break;
         }
@@ -104,20 +117,26 @@ static void execute_instruction(CPU *cpu, u8 opcode) {
             break;
         }
 
-
-
-        
-        // ============================================= //
-        //            LD -> Load Instructions            //
-        // ============================================= //
-
-        case 0x01: {            // LD BC, d16
-            cpu->cycles += 12;
-            u16 d16 = read_word(cpu->PC + 1);
-            cpu->BC = d16;
-            cpu->PC += 3;
+        case 0xF3: {            // DI (Disable Interrupts)
+            cpu->cycles += 4;
+            cpu->ime = false;
+            cpu->PC += 1;
             break;
         }
+
+        case 0xFB: {            // EI (Enable Interrupts)
+            cpu->cycles += 4;
+            cpu->ime_enable_scheduled = true;   // TODO: handle this correctly
+            cpu->PC += 1;
+            break;
+        }
+
+
+
+
+        // ============================================= //
+        //            8-bit Load Instructions            //
+        // ============================================= //
 
         case 0x02: {            // LD [BC], A
             cpu->cycles += 8;
@@ -134,27 +153,11 @@ static void execute_instruction(CPU *cpu, u8 opcode) {
             break;
         }
 
-        case 0x08: {            // LD [a16], SP
-            cpu->cycles += 20;
-            u16 address = read_word(cpu->PC + 1);
-            write_word(address, cpu->SP);
-            cpu->PC += 3;
-            break;
-        }
-
         case 0x0A: {            // LD A, [BC]
             cpu->cycles += 8;
             u8 value = read_byte(cpu->BC);
             cpu->A = value;
             cpu->PC += 1;
-            break;
-        }
-
-        case 0x11: {            // LD DE, d16
-            cpu->cycles += 12;
-            u16 value = read_word(cpu->PC + 1);
-            cpu->DE = value;
-            cpu->PC += 3;
             break;
         }
 
@@ -198,14 +201,6 @@ static void execute_instruction(CPU *cpu, u8 opcode) {
             break;
         }
 
-        case 0x21: {            // LD HL, d16
-            cpu->cycles += 12;
-            u16 value = read_word(cpu->PC + 1);
-            cpu->HL = value;
-            cpu->PC += 3;
-            break;
-        }
-
         case 0x22: {            // LD [HL+], A
             cpu->cycles += 8;
             u16 address = cpu->HL;
@@ -216,6 +211,44 @@ static void execute_instruction(CPU *cpu, u8 opcode) {
         }
 
 
+
+
+
+        // ============================================= //
+        //            16-bit Load Instructions           //
+        // ============================================= //
+
+        case 0x01: {            // LD BC, d16
+            cpu->cycles += 12;
+            u16 d16 = read_word(cpu->PC + 1);
+            cpu->BC = d16;
+            cpu->PC += 3;
+            break;
+        }
+
+        case 0x08: {            // LD [a16], SP
+            cpu->cycles += 20;
+            u16 address = read_word(cpu->PC + 1);
+            write_word(address, cpu->SP);
+            cpu->PC += 3;
+            break;
+        }
+
+        case 0x11: {            // LD DE, d16
+            cpu->cycles += 12;
+            u16 value = read_word(cpu->PC + 1);
+            cpu->DE = value;
+            cpu->PC += 3;
+            break;
+        }
+
+        case 0x21: {            // LD HL, d16
+            cpu->cycles += 12;
+            u16 value = read_word(cpu->PC + 1);
+            cpu->HL = value;
+            cpu->PC += 3;
+            break;
+        }
 
 
         // ============================================= //
@@ -273,7 +306,7 @@ static void execute_instruction(CPU *cpu, u8 opcode) {
             SET_FLAG(cpu->F, FLAG_N);
 
             if ((result & 0xFF) == 0) SET_FLAG(cpu->F, FLAG_Z);
-            if ((cpu->C & 0x0F) == 0x10) SET_FLAG(cpu->F, FLAG_H); 
+            if ((cpu->C & 0x0F) == 0x10) SET_FLAG(cpu->F, FLAG_H);
 
             cpu->C = result;
             cpu->PC += 1;
@@ -302,7 +335,7 @@ static void execute_instruction(CPU *cpu, u8 opcode) {
             SET_FLAG(cpu->F, FLAG_N);
 
             if ((result & 0xFF) == 0) SET_FLAG(cpu->F, FLAG_Z);
-            if ((cpu->D & 0x0F) == 0x10) SET_FLAG(cpu->F, FLAG_H); 
+            if ((cpu->D & 0x0F) == 0x10) SET_FLAG(cpu->F, FLAG_H);
 
             cpu->PC += 1;
             break;
@@ -329,7 +362,7 @@ static void execute_instruction(CPU *cpu, u8 opcode) {
             SET_FLAG(cpu->F, FLAG_N);
 
             if ((result & 0xFF) == 0) SET_FLAG(cpu->F, FLAG_Z);
-            if ((cpu->E & 0x0F) == 0x10) SET_FLAG(cpu->F, FLAG_H); 
+            if ((cpu->E & 0x0F) == 0x10) SET_FLAG(cpu->F, FLAG_H);
 
             cpu->PC += 1;
             break;
@@ -356,7 +389,7 @@ static void execute_instruction(CPU *cpu, u8 opcode) {
             CLEAR_FLAG(cpu->F, FLAG_N | FLAG_H | FLAG_C);
             if ((cpu->HL & 0xFFF) + (cpu->BC & 0xFFF) > 0xFFF)      // Half Carry
                 SET_FLAG(cpu->F, FLAG_H);
-        
+
             if (result > 0xFFFF)                                    // Carry
                 SET_FLAG(cpu->F, FLAG_C);
 
@@ -386,7 +419,7 @@ static void execute_instruction(CPU *cpu, u8 opcode) {
             CLEAR_FLAG(cpu->F, FLAG_N | FLAG_H | FLAG_C);
             if ((cpu->HL & 0xFFF) + (cpu->DE & 0xFFF) > 0xFFF)      // Half Carry
                 SET_FLAG(cpu->F, FLAG_H);
-        
+
             if (result > 0xFFFF)                                    // Carry
                 SET_FLAG(cpu->F, FLAG_C);
 
@@ -408,7 +441,7 @@ static void execute_instruction(CPU *cpu, u8 opcode) {
             break;
         }
 
-        
+
 
 
         // ============================================= //
@@ -465,7 +498,7 @@ static void execute_instruction(CPU *cpu, u8 opcode) {
             break;
         }
 
-        
+
 
 
         // ============================================= //
@@ -493,7 +526,7 @@ static void execute_instruction(CPU *cpu, u8 opcode) {
             break;
         }
 
-        
+
         default:                // Error Case
             printf("Unknown opcode: 0x%02X at PC=0x%04X\n", opcode, cpu->PC - 1);
             break;

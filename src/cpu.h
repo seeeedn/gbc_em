@@ -30,13 +30,13 @@ extern u8 memory[MEM_SIZE];
 typedef struct {
 
     union {
-        struct {    
-            u8 A;           // 8-bit Accumulator register   
+        struct {
+            u8 A;           // 8-bit Accumulator register
             u8 F;
         };
         u16 AF;             // special 16-bit register for storing flags of arithmetic/logic operations
     };
-    
+
     union {
         struct {
             u8 B;           // 8-bit General Purpose Register
@@ -44,7 +44,7 @@ typedef struct {
         };
         u16 BC;             // 16-bit register comprised out of 2 * 8-bit registers
     };
-    
+
     union {
         struct {
             u8 D;
@@ -65,7 +65,8 @@ typedef struct {
     u16 PC;                 // Program Counter
     u64 cycles;             // CPU cycles passed
 
-    bool ime;                 // "interrupt master enable"
+    bool ime;               // "interrupt master enable"
+    bool ime_enable_scheduled;
     bool halted;
     bool stopped;
 } CPU;
