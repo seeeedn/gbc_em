@@ -18,30 +18,6 @@ void init_cpu(CPU *cpu) {
     cpu->cycles = 0;
 }
 
-int load_rom(const char* filename) {
-    FILE *rom_file = fopen(filename, "rb");
-    if (!rom_file) {
-        printf("Failed to open ROM file: %s\n", filename);
-        return -1;
-    }
-
-    // Read ROM into memory starting at address 0x0100
-    fseek(rom_file, 0, SEEK_END);
-    long file_size = ftell(rom_file);
-    fseek(rom_file, 0, SEEK_SET);
-
-    if (file_size > MEM_SIZE) {
-        printf("ROM file too large to fit in memory.\n");
-        fclose(rom_file);
-        return -1;
-    }
-
-    fread(&memory[0x0100], 1, file_size, rom_file);
-    fclose(rom_file);
-
-    return 0;
-}
-
 // ============================================= //
 //             Read & Write Functions            //
 // ============================================= //
@@ -58,7 +34,7 @@ static u16 read_word(u16 address) {
 }
 
 static i16 read_word_signed(u16 address) {
-    return (i16)(read_byte(address + 1) << 8) | read_byte(address);
+    return (i16)((read_byte(address + 1) << 8) | read_byte(address));
 }
 
 static void write_byte(u16 address, u8 value) {
@@ -92,6 +68,7 @@ static void execute_instruction(CPU *cpu, u8 opcode) {
 
         case 0x00: {            // NOP (No operation)
             cpu->cycles += 4;
+            cpu->PC += 1;
             break;
         }
 
@@ -126,7 +103,7 @@ static void execute_instruction(CPU *cpu, u8 opcode) {
 
         case 0xFB: {            // EI (Enable Interrupts)
             cpu->cycles += 4;
-            cpu->ime_enable_scheduled = true;   // TODO: handle this correctly
+            cpu->ime_enable_scheduled = true;   // TODO: add the logic
             cpu->PC += 1;
             break;
         }
@@ -161,19 +138,19 @@ static void execute_instruction(CPU *cpu, u8 opcode) {
             break;
         }
 
-        case 0x12: {            // LD [DE], A
-            cpu->cycles += 8;
-            u16 address = cpu->DE;
-            write_byte(address, cpu->A);
-            cpu->PC += 1;
-            break;
-        }
-
         case 0x0E: {            // LD C, d8
             cpu->cycles += 8;
             u8 value = read_byte(cpu->PC + 1);
             cpu->C = value;
             cpu->PC += 2;
+            break;
+        }
+
+        case 0x12: {            // LD [DE], A
+            cpu->cycles += 8;
+            u16 address = cpu->DE;
+            write_byte(address, cpu->A);
+            cpu->PC += 1;
             break;
         }
 
@@ -210,8 +187,66 @@ static void execute_instruction(CPU *cpu, u8 opcode) {
             break;
         }
 
+        case 0x26: {            // LD H, d8
+            cpu->cycles += 8;
+            u8 value = read_byte(cpu->PC + 1);
+            cpu->H = value;
+            cpu->PC += 2;
+            break;
+        }
 
+        case 0x2A: {            // LD A, [HL+]
+            cpu->cycles += 8;
+            u8 value = read_byte(cpu->HL);
+            cpu->A = value;
+            cpu->HL += 1;
+            cpu->PC += 1;
+            break;
+        }
 
+        case 0x2E: {            // LD L, d8
+            cpu->cycles += 8;
+            u8 value = read_byte(cpu->PC + 1);
+            cpu->L = value;
+            cpu->PC += 2;
+            break;
+        }
+
+        case 0x32: {            // LD [HL-], A
+            cpu->cycles += 8;
+            u16 address = cpu->HL;
+            write_byte(address, cpu->A);
+            cpu->HL -= 1;
+            cpu->PC += 1;
+            break;
+        }
+
+        case 0x36: {            // LD [HL], d8
+            cpu->cycles += 12;
+            u16 address = cpu->HL;
+            write_byte(address, cpu->PC + 1);
+            cpu->PC += 2;
+            break;
+        }
+
+        case 0x3A: {            // LD A, [HL-]
+            cpu->cycles += 8;
+            u8 value = read_byte(cpu->HL);
+            cpu->A = value;
+            cpu->HL -= 1;
+            cpu->PC += 1;
+            break;
+        }
+
+        case 0x3E: {            // LD A, d8
+            cpu->cycles += 8;
+            u8 value = read_byte(cpu->PC + 1);
+            cpu->A = value;
+            cpu->PC += 2;
+            break;
+        }
+
+        // TODO: decoding of opcodes 0x40 - 0x7F
 
 
         // ============================================= //
@@ -247,6 +282,112 @@ static void execute_instruction(CPU *cpu, u8 opcode) {
             u16 value = read_word(cpu->PC + 1);
             cpu->HL = value;
             cpu->PC += 3;
+            break;
+        }
+
+        case 0x31: {            // LD SP, d16
+            cpu->cycles += 12;
+            u16 value = read_word(cpu->PC + 1);
+            cpu->SP = value;
+            cpu->PC += 3;
+            break;
+        }
+
+        case 0xC1: {            // POP BC
+            cpu->cycles += 12;
+            u16 value = read_word(cpu->SP);
+            cpu->BC = value;
+            cpu->SP += 2;
+            cpu->PC += 1;
+            break;
+        }
+
+        case 0xC5: {            // PUSH BC
+            cpu->cycles += 16;
+            cpu->SP -= 2;
+            u16 address = cpu->SP;
+            write_word(address, cpu->BC);
+            cpu->PC += 1;
+            break;
+        }
+
+        case 0xD1: {            // POP DE
+            cpu->cycles += 12;
+            u16 value = read_word(cpu->SP);
+            cpu->DE = value;
+            cpu->SP += 2;
+            cpu->PC += 1;
+            break;
+        }
+
+        case 0xD5: {            // PUSH DE
+            cpu->cycles += 16;
+            cpu->SP -= 2;
+            u16 address = cpu->SP;
+            write_word(address, cpu->DE);
+            cpu->PC += 1;
+            break;
+        }
+
+        case 0xE1: {            // POP HL
+            cpu->cycles += 12;
+            u16 value = read_word(cpu->SP);
+            cpu->HL = value;
+            cpu->SP += 2;
+            cpu->PC += 1;
+            break;
+        }
+
+        case 0xE5: {            // PUSH HL
+            cpu->cycles += 16;
+            cpu->SP -= 2;
+            u16 address = cpu->SP;
+            write_word(address, cpu->HL);
+            cpu->PC += 1;
+            break;
+        }
+
+        case 0xF1: {            // POP AF
+            cpu->cycles += 12;
+            u16 value = read_word(cpu->SP);
+            cpu->AF = value;
+            cpu->SP += 2;
+            cpu->PC += 1;
+            break;
+        }
+
+        case 0xF5: {            // PUSH AF
+            cpu->cycles += 16;
+            cpu->SP -= 2;
+            u16 address = cpu->SP;
+            write_word(address, cpu->AF);
+            cpu->PC += 1;
+            break;
+        }
+
+        case 0xF8: {            // LD HL, SP + r8
+            cpu->cycles += 12;
+
+            i8 offset = read_byte_signed(cpu->PC + 1);
+            u16 value = cpu->SP + offset;
+            cpu->HL = value;
+
+            CLEAR_FLAG(cpu->F, FLAG_Z | FLAG_N | FLAG_H | FLAG_C);
+            if (value > 0xFFFF)
+                SET_FLAG(cpu->F, FLAG_C);
+
+            if (((cpu->SP & 0x0F) + (offset & 0x0F)) > 0x0F)
+                SET_FLAG(cpu->F, FLAG_H);
+
+            cpu->PC += 2;
+            break;
+        }
+
+        case 0xF9: {            // LD SP, HL
+            cpu->cycles += 8;
+            u16 value = cpu->HL;
+            cpu->SP = value;
+            cpu->PC += 1;
             break;
         }
 
@@ -368,7 +509,7 @@ static void execute_instruction(CPU *cpu, u8 opcode) {
             break;
         }
 
-
+        // TODO: decoding of opcodes 0x80 - 0xBF
 
 
         // ============================================= //
@@ -414,7 +555,7 @@ static void execute_instruction(CPU *cpu, u8 opcode) {
 
         case 0x19: {            // ADD HL, DE
             cpu->cycles += 8;
-            u16 result = cpu->HL + cpu->DE;
+            u32 result = cpu->HL + cpu->DE;
 
             CLEAR_FLAG(cpu->F, FLAG_N | FLAG_H | FLAG_C);
             if ((cpu->HL & 0xFFF) + (cpu->DE & 0xFFF) > 0xFFF)      // Half Carry
@@ -423,6 +564,7 @@ static void execute_instruction(CPU *cpu, u8 opcode) {
             if (result > 0xFFFF)                                    // Carry
                 SET_FLAG(cpu->F, FLAG_C);
 
+            cpu->HL = (u16)result;
             cpu->PC += 1;
             break;
         }
@@ -438,6 +580,77 @@ static void execute_instruction(CPU *cpu, u8 opcode) {
             cpu->cycles += 8;
             cpu->HL += 1;
             cpu->PC += 1;
+            break;
+        }
+
+        case 0x29: {            // ADD HL, HL
+            cpu->cycles += 8;
+            u32 result = cpu->HL + cpu->HL;
+
+            CLEAR_FLAG(cpu->F, FLAG_N | FLAG_H | FLAG_C);
+            if ((cpu->HL & 0xFFF) + (cpu->HL & 0xFFF) > 0xFFF)      // Half Carry
+                SET_FLAG(cpu->F, FLAG_H);
+
+            if (result > 0xFFFF)                                    // Carry
+                SET_FLAG(cpu->F, FLAG_C);
+
+            cpu->HL = (u16)result;
+            cpu->PC += 1;
+            break;
+        }
+
+        case 0x2B: {            // DEC HL
+            cpu->cycles += 8;
+            cpu->HL -= 1;
+            cpu->PC += 1;
+            break;
+        }
+
+        case 0x33: {            // INC SP
+            cpu->cycles += 8;
+            cpu->SP += 1;
+            cpu->PC += 1;
+            break;
+        }
+
+        case 0x39: {            // ADD HL, SP
+            cpu->cycles += 8;
+            u32 result = cpu->HL + cpu->SP;
+
+            CLEAR_FLAG(cpu->F, FLAG_N | FLAG_H | FLAG_C);
+            if ((cpu->HL & 0xFFF) + (cpu->SP & 0xFFF) > 0xFFF)      // Half Carry
+                SET_FLAG(cpu->F, FLAG_H);
+
+            if (result > 0xFFFF)                                    // Carry
+                SET_FLAG(cpu->F, FLAG_C);
+
+            cpu->HL = (u16)result;
+            cpu->PC += 1;
+            break;
+        }
+
+        case 0x3B: {            // DEC SP
+            cpu->cycles += 8;
+            cpu->SP -= 1;
+            cpu->PC += 1;
+            break;
+        }
+
+        case 0xE8: {            // ADD SP, r8
+            cpu->cycles += 16;
+
+            i8 value = read_byte_signed(cpu->PC + 1);
+            u32 result = cpu->SP + value;
+
+            CLEAR_FLAG(cpu->F, FLAG_Z | FLAG_N | FLAG_H | FLAG_C);
+            if ((cpu->SP & 0x0F) + (cpu->SP & 0x0F) > 0x0F)        // Half Carry
+                SET_FLAG(cpu->F, FLAG_H);
+
+            if (((cpu->SP & 0xFF) + (value & 0xFF)) > 0xFF)        // Carry
+                SET_FLAG(cpu->F, FLAG_C);
+
+            cpu->SP = (u16)result;
+            cpu->PC += 2;
             break;
         }
 
@@ -536,4 +749,7 @@ static void execute_instruction(CPU *cpu, u8 opcode) {
 void cpu_step(CPU *cpu) {
     u8 opcode = memory[cpu->PC++];
     execute_instruction(cpu, opcode);
+
+    // handle ime_enable_schedueled correctly
+
 }
