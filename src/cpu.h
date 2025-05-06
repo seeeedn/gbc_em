@@ -24,17 +24,21 @@ extern u8 memory[MEM_SIZE];
 
 #define SET_FLAG(reg, flag)         ((reg) |= (flag))
 #define CLEAR_FLAG(reg, flag)       ((reg) &= ~(flag))
+#define CLEAR_ALL_FLAGS(reg)        (reg = 0)
 #define IS_FLAG_SET(reg, flag)      (((reg) & (flag)) != 0)
 #define IS_FLAG_CLEAR(reg, flag)    (((reg) & (flag)) == 0)
+
+#define DEST_REG_BIT (7 << 3)   // 0b111000
+#define SOURCE_REG_BIT 7        // 0b000111
 
 typedef struct {
 
     union {                 // 8-bit registers have to be swapped, because of little endian
         struct {
-            u8 F;           // flag register
+            u8 F;           // Flag register
             u8 A;           // 8-bit Accumulator register
         };
-        u16 AF;             // special 16-bit register for storing flags of arithmetic/logic operations
+        u16 AF;             // Special 16-bit register comprised out of the Flag register and the Accumulator register
     };
 
     union {
@@ -42,7 +46,7 @@ typedef struct {
             u8 C;           // 8-bit General Purpose Register
             u8 B;
         };
-        u16 BC;             // 16-bit register comprised out of 2 * 8-bit registers
+        u16 BC;             // 16-bit register comprised out of two 8-bit registers
     };
 
     union {
@@ -50,7 +54,7 @@ typedef struct {
             u8 E;
             u8 D;
         };
-        u16 DE;             // 16-bit register comprised out of 2 * 8-bit registers
+        u16 DE;             // 16-bit register comprised out of two 8-bit registers
     };
 
     union {
@@ -58,7 +62,7 @@ typedef struct {
             u8 L;
             u8 H;
         };
-        u16 HL;             // 16-bit register comprised out of 2 * 8-bit registers
+        u16 HL;             // 16-bit register comprised out of two 8-bit registers
     };
 
     u16 SP;                 // Stackpointer register
@@ -66,14 +70,14 @@ typedef struct {
     u16 PC;                 // Program Counter
     u64 cycles;             // CPU cycles passed
 
-    bool ime;               // "interrupt master enable"
-    bool ime_enable_scheduled;
+    bool ime;               // "Interrupt Master Enable"
+    u64 ime_delay;          // CPU-steps until IME is enabled after EI-Instruction is being executed
+
     bool halted;
     bool stopped;
 } CPU;
 
 void init_cpu(CPU *cpu);
-int load_rom(const char *filename);
 void cpu_step(CPU *cpu);
 
 #endif

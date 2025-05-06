@@ -1,5 +1,4 @@
 #include "cpu.h"
-#include <stdbool.h>
 #include <stdio.h>
 
 u8 memory[MEM_SIZE] = {0};
@@ -12,7 +11,7 @@ void init_cpu(CPU *cpu) {
     cpu->SP = 0xFFFE;
     cpu->PC = 0x0100;
     cpu->ime = true;
-    cpu->ime_enable_scheduled = false;
+    cpu->ime_delay = 0;
     cpu->halted = false;
     cpu->stopped = false;
     cpu->cycles = 0;
@@ -44,6 +43,107 @@ static void write_byte(u16 address, u8 value) {
 static void write_word(u16 address, u16 value) {
     write_byte(address, (u8)(value & 0xFF));
     write_byte(address + 1, (u8)(value >> 8));
+}
+
+
+static u8* get_register(CPU *cpu, u8 reg) {
+    switch (reg) {
+        case 0b000: return &cpu->B;
+        case 0b001: return &cpu->C;
+        case 0b010: return &cpu->D;
+        case 0b011: return &cpu->E;
+        case 0b100: return &cpu->H;
+        case 0b101: return &cpu->L;
+        // Left out 0b110 because its handled separately
+        case 0b111: return &cpu->A;
+        default: return NULL;
+    }
+}
+
+
+// ============================================= //
+//                 Load Functions                //
+// ============================================= //
+static void load_to_r8(u8 *dest_reg, u8 source_reg) {
+    *dest_reg = source_reg;
+}
+
+static void load_hl(u8 *dest_reg, u16 address) {
+    u8 value = read_byte(address);
+    *dest_reg = value;
+}
+
+static void load_to_hl(u16 address, u8 source_reg) {
+    u8 value = source_reg;
+    write_byte(address, value);
+}
+
+// ============================================= //
+//                Logic Functions                //
+// ============================================= //
+static void and_r8(CPU *cpu, u8 reg) {
+    u8 result = cpu->A & reg;
+
+    CLEAR_ALL_FLAGS(cpu->F);
+    SET_FLAG(cpu->F, FLAG_H);
+    if (result == 0)
+        SET_FLAG(cpu->F, FLAG_Z);
+
+    cpu->A = result;
+}
+
+static void and_hl(CPU *cpu, u16 address) {
+    u8 value = read_byte(address);
+    u8 result = cpu->A & value;
+
+    CLEAR_ALL_FLAGS(cpu->F);
+    SET_FLAG(cpu->F, FLAG_H);
+    if (result == 0)
+        SET_FLAG(cpu->F, FLAG_Z);
+
+    cpu->A = result;
+}
+
+static void xor_r8(CPU *cpu, u8 reg) {
+    u8 result = cpu->A ^ reg;
+
+    CLEAR_ALL_FLAGS(cpu->F);
+    if (result == 0)
+        SET_FLAG(cpu->F, FLAG_Z);
+
+    cpu->A = result;
+}
+
+static void xor_hl(CPU *cpu, u16 address) {
+    u8 value = read_byte(address);
+    u8 result = cpu->A ^ value;
+
+    CLEAR_ALL_FLAGS(cpu->F);
+    if (result == 0)
+        SET_FLAG(cpu->F, FLAG_Z);
+
+    cpu->A = result;
+}
+
+static void or_r8(CPU *cpu, u8 reg) {
+    u8 result = cpu->A | reg;
+
+    CLEAR_ALL_FLAGS(cpu->F);
+    if (result == 0)
+        SET_FLAG(cpu->F, FLAG_Z);
+
+    cpu->A = result;
+}
+
+static void or_hl(CPU *cpu, u16 address) {
+    u8 value = read_byte(address);
+    u8 result = cpu->A | value;
+
+    CLEAR_ALL_FLAGS(cpu->F);
+    if (result == 0)
+        SET_FLAG(cpu->F, FLAG_Z);
+
+    cpu->A = result;
 }
 
 // executes the instruction of the given opcode (with cb prefix)
@@ -103,7 +203,7 @@ static void execute_instruction(CPU *cpu, u8 opcode) {
 
         case 0xFB: {            // EI (Enable Interrupts)
             cpu->cycles += 4;
-            cpu->ime_enable_scheduled = true;   // TODO: add the logic
+            cpu->ime_delay = 1;
             cpu->PC += 1;
             break;
         }
@@ -125,7 +225,7 @@ static void execute_instruction(CPU *cpu, u8 opcode) {
         case 0x06: {            // LD B, d8
             cpu->cycles += 8;
             u8 d8 = read_byte(cpu->PC + 1);
-            cpu->B = d8;
+            load_to_r8(&cpu->B, d8);
             cpu->PC += 2;
             break;
         }
@@ -197,8 +297,7 @@ static void execute_instruction(CPU *cpu, u8 opcode) {
 
         case 0x2A: {            // LD A, [HL+]
             cpu->cycles += 8;
-            u8 value = read_byte(cpu->HL);
-            cpu->A = value;
+            load_hl(&cpu->A, cpu->HL);
             cpu->HL += 1;
             cpu->PC += 1;
             break;
@@ -243,6 +342,104 @@ static void execute_instruction(CPU *cpu, u8 opcode) {
             u8 value = read_byte(cpu->PC + 1);
             cpu->A = value;
             cpu->PC += 2;
+            break;
+        }
+
+        case 0x40 ... 0x75: {
+            u8 high_bit = (opcode & DEST_REG_BIT) >> 3;
+            u8 low_bit = opcode & SOURCE_REG_BIT;
+            u8 *dest_reg = get_register(cpu, high_bit);
+            u8 *source_reg = get_register(cpu, low_bit);
+
+            if (high_bit == 0b110) {        // Is true if dest_reg is HL
+                load_to_hl(cpu->HL, *source_reg);
+                cpu->cycles += 8;
+                cpu->PC += 1;
+                break;
+            }
+
+            if (low_bit == 0b110) {         // Is true if source_reg is HL
+                load_hl(dest_reg, cpu->HL);
+                cpu->cycles += 8;
+                cpu->PC += 1;
+                break;
+            }
+
+            load_to_r8(dest_reg, *source_reg);
+            cpu->cycles += 4;
+            cpu->PC += 1;
+            break;
+        }
+
+        case 0x77 ... 0x7F: {               // Same as above
+            u8 high_bit = (opcode & DEST_REG_BIT) >> 3;
+            u8 low_bit = opcode & SOURCE_REG_BIT;
+            u8 *dest_reg_2 = get_register(cpu, high_bit);
+            u8 *source_reg_2 = get_register(cpu, low_bit);
+
+            if (high_bit == 0b110) {        // Is true if dest_reg is HL
+                load_to_hl(cpu->HL, *source_reg_2);
+                cpu->cycles += 8;
+                cpu->PC += 1;
+                break;
+            }
+
+            if (low_bit == 0b110) {         // Is true if source_reg is HL
+                load_hl(dest_reg_2, cpu->HL);
+                cpu->cycles += 8;
+                cpu->PC += 1;
+                break;
+            }
+
+            load_to_r8(dest_reg_2, *source_reg_2);
+            cpu->cycles += 4;
+            cpu->PC += 1;
+            break;
+        }
+
+
+
+        case 0xE0: {            // LDH [0xFF00 + a8], A
+            cpu->cycles += 12;
+            u8 offset = read_byte_signed(cpu->PC);
+            u16 address = 0xFF00 + offset;
+            write_byte(address, cpu->A);
+            cpu->PC += 2;
+            break;
+        }
+
+        case 0xE2: {            // LD [0xFF00 + C], A
+            cpu->cycles += 8;
+            u16 address = 0xFF00 + cpu->C;
+            write_byte(address, cpu->A);
+            cpu->PC += 1;
+            break;
+        }
+
+        case 0xEA: {            // LDH [a16], A
+            cpu->cycles += 16;
+            u16 address = read_word(cpu->PC);
+            write_byte(address, cpu->A);
+            cpu->PC += 3;
+            break;
+        }
+
+        case 0xF0: {            // LDH A, [0xFF00 + a8]
+            cpu->cycles += 12;
+            u8 offset = read_byte(cpu->PC);
+            u16 address = 0xFF00 + offset;
+            u8 value = read_byte(address);
+            cpu->A = value;
+            cpu->PC += 2;
+            break;
+        }
+
+        case 0xF2: {            // LD A, [0xFF00 + C]
+            cpu->cycles += 8;
+            u16 address = 0xFF00 + cpu->C;
+            u8 value = read_byte(address);
+            load_to_r8(&cpu->A, value);
+            cpu->PC += 1;
             break;
         }
 
@@ -372,7 +569,7 @@ static void execute_instruction(CPU *cpu, u8 opcode) {
             u16 value = cpu->SP + offset;
             cpu->HL = value;
 
-            CLEAR_FLAG(cpu->F, FLAG_Z | FLAG_N | FLAG_H | FLAG_C);
+            CLEAR_ALL_FLAGS(cpu->F);
             if (value > 0xFFFF)
                 SET_FLAG(cpu->F, FLAG_C);
 
@@ -510,6 +707,53 @@ static void execute_instruction(CPU *cpu, u8 opcode) {
         }
 
         // TODO: decoding of opcodes 0x80 - 0xBF
+        case 0xA0 ... 0xA7: {   // AND r8
+            u8 low_bit = opcode & SOURCE_REG_BIT;
+            u8 *source_reg = get_register(cpu, low_bit);
+
+            if (low_bit == 0b110) {
+                and_hl(cpu, cpu->HL);
+                cpu->cycles += 8;
+                cpu->PC += 1;
+                break;
+            }
+
+            and_r8(cpu, *source_reg);
+            cpu->cycles += 4;
+            cpu->PC += 1;
+        }
+
+        case 0xA8 ... 0xAF: {   // XOR r8
+            u8 low_bit = opcode & SOURCE_REG_BIT;
+            u8 *source_reg = get_register(cpu, low_bit);
+
+            if (low_bit == 0b110) {
+                xor_hl(cpu, cpu->HL);
+                cpu->cycles += 8;
+                cpu->PC += 1;
+                break;
+            }
+
+            xor_r8(cpu, *source_reg);
+            cpu->cycles += 4;
+            cpu->PC += 1;
+        }
+
+        case 0xB0 ... 0xB7: {   // OR r8
+            u8 low_bit = opcode & SOURCE_REG_BIT;
+            u8 *source_reg = get_register(cpu, low_bit);
+
+            if (low_bit == 0b110) {
+                or_hl(cpu, cpu->HL);
+                cpu->cycles += 8;
+                cpu->PC += 1;
+                break;
+            }
+
+            or_r8(cpu, *source_reg);
+            cpu->cycles += 4;
+            cpu->PC += 1;
+        }
 
 
         // ============================================= //
@@ -642,7 +886,7 @@ static void execute_instruction(CPU *cpu, u8 opcode) {
             i8 value = read_byte_signed(cpu->PC + 1);
             u32 result = cpu->SP + value;
 
-            CLEAR_FLAG(cpu->F, FLAG_Z | FLAG_N | FLAG_H | FLAG_C);
+            CLEAR_ALL_FLAGS(cpu->F);
             if ((cpu->SP & 0x0F) + (cpu->SP & 0x0F) > 0x0F)        // Half Carry
                 SET_FLAG(cpu->F, FLAG_H);
 
@@ -666,7 +910,7 @@ static void execute_instruction(CPU *cpu, u8 opcode) {
             u8 bit7 = (cpu->A & 0x80) >> 7;
             cpu->A = (cpu->A << 1) | bit7;
 
-            CLEAR_FLAG(cpu->F, FLAG_Z | FLAG_N | FLAG_H | FLAG_C);
+            CLEAR_ALL_FLAGS(cpu->F);
             if (bit7) SET_FLAG(cpu->F, FLAG_C);
 
             cpu->PC += 1;
@@ -678,7 +922,7 @@ static void execute_instruction(CPU *cpu, u8 opcode) {
             u8 bit0 = (cpu->A & 0x01) << 7;
             cpu->A = (cpu->A >> 1) | bit0;
 
-            CLEAR_FLAG(cpu->F, FLAG_Z | FLAG_N | FLAG_H | FLAG_C);
+            CLEAR_ALL_FLAGS(cpu->F);
             if (bit0) SET_FLAG(cpu->F, FLAG_C);
 
             cpu->PC += 1;
@@ -691,7 +935,7 @@ static void execute_instruction(CPU *cpu, u8 opcode) {
             u8 bit7 = (cpu->A & 0x80) >> 7;
             cpu->A = (cpu->A << 1) | old_carry;
 
-            CLEAR_FLAG(cpu->F, FLAG_Z | FLAG_N | FLAG_H | FLAG_C);
+            CLEAR_ALL_FLAGS(cpu->F);
             if (bit7) SET_FLAG(cpu->F, FLAG_C);
 
             cpu->PC += 1;
@@ -704,7 +948,7 @@ static void execute_instruction(CPU *cpu, u8 opcode) {
             u8 bit0 = (cpu->A & 0x01) << 7;
             cpu->A = (cpu->A >> 1) | old_carry;
 
-            CLEAR_FLAG(cpu->F, FLAG_Z | FLAG_N | FLAG_H | FLAG_C);
+            CLEAR_ALL_FLAGS(cpu->F);
             if (bit0) SET_FLAG(cpu->F, FLAG_C);
 
             cpu->PC += 1;
@@ -750,6 +994,10 @@ void cpu_step(CPU *cpu) {
     u8 opcode = memory[cpu->PC++];
     execute_instruction(cpu, opcode);
 
-    // handle ime_enable_schedueled correctly
-
+    if (cpu->ime_delay > 0) {
+        cpu->ime_delay--;
+        if (cpu->ime_delay == 0) {
+            cpu->ime = true;
+        }
+    }
 }
