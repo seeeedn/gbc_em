@@ -24,7 +24,7 @@ extern u8 memory[MEM_SIZE];
 
 #define SET_FLAG(reg, flag)         ((reg) |= (flag))
 #define CLEAR_FLAG(reg, flag)       ((reg) &= ~(flag))
-#define CLEAR_ALL_FLAGS(reg)        (reg = 0)
+#define CLEAR_ALL_FLAGS(reg)        ((reg) = 0)
 #define IS_FLAG_SET(reg, flag)      (((reg) & (flag)) != 0)
 #define IS_FLAG_CLEAR(reg, flag)    (((reg) & (flag)) == 0)
 
