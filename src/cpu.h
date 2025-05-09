@@ -28,6 +28,9 @@ extern u8 memory[MEM_SIZE];
 #define IS_FLAG_SET(reg, flag)      (((reg) & (flag)) != 0)
 #define IS_FLAG_CLEAR(reg, flag)    (((reg) & (flag)) == 0)
 
+#define IS_BIT_SET(reg, bit)      (((reg) & (bit)) != 0)
+#define IS_BIT_CLEAR(reg, bit)    (((reg) & (bit)) == 0)
+
 #define DEST_REG_BIT (7 << 3)   // 0b111000
 #define SOURCE_REG_BIT 7        // 0b000111
 
