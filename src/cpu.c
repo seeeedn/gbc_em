@@ -161,6 +161,10 @@ static void or_hl(CPU *cpu, u16 address) {
 
 // executes the instruction of the given opcode (with cb prefix)
 static void execute_cb_instruction(CPU *cpu, u8 cb_opcode) {
+
+    u8 *r8_lookup[] = { &cpu->B, &cpu->C, &cpu->D, &cpu->E, &cpu->H, &cpu->L, NULL, &cpu->A };
+    u16 *r16_lookup[] = { &cpu->BC, &cpu->DE, &cpu->HL, &cpu->SP };
+
     switch (cb_opcode) {
 
         case 0x40 ... 0x7F: {       // BIT x, r8
@@ -186,6 +190,10 @@ static void execute_cb_instruction(CPU *cpu, u8 cb_opcode) {
 
 // executes the instruction of the given opcode (without cb prefix)
 static void execute_instruction(CPU *cpu, u8 opcode) {
+
+    u8 *r8_lookup[] = { &cpu->B, &cpu->C, &cpu->D, &cpu->E, &cpu->H, &cpu->L, NULL, &cpu->A };
+    u16 *r16_lookup[] = { &cpu->BC, &cpu->DE, &cpu->HL, &cpu->SP };
+
     switch (opcode) {
         // ============================================= //
         //           Misc/Control instructions           //
