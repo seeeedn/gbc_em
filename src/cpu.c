@@ -169,7 +169,7 @@ static void execute_cb_instruction(CPU *cpu, u8 cb_opcode) {
             break;
         }
 
-        case 0x40 ... 0x7F: {       // BIT x, r8/m8
+        case 0x40 ... 0x7F: {       // BIT Bit, r8/m8
             u8 target_bit = (cb_opcode & DEST_REG_BIT) >> 3;
             u8 dest_reg_bit = cb_opcode & SOURCE_REG_BIT;
             u8 *dest_reg = r8_lookup[dest_reg_bit];
@@ -199,7 +199,7 @@ static void execute_cb_instruction(CPU *cpu, u8 cb_opcode) {
             break;
         }
 
-        case 0x80 ... 0xBF: {       // RES x, r8/m8
+        case 0x80 ... 0xBF: {       // RES Bit, r8/m8
             u8 target_bit = (cb_opcode & DEST_REG_BIT) >> 3;
             u8 dest_reg_bit = cb_opcode & SOURCE_REG_BIT;
             u8 *dest_reg = r8_lookup[dest_reg_bit];
@@ -296,7 +296,7 @@ static void execute_instruction(CPU *cpu, u8 opcode) {
         }
 
         case 0xFB: {            // EI (Enable Interrupts)
-            cpu->ime_delay = 1;
+            cpu->ime_delay = 2;
             cpu->cycles += 4;
             cpu->PC += 1;
             break;
@@ -329,7 +329,7 @@ static void execute_instruction(CPU *cpu, u8 opcode) {
             bool inc_hl_store = (opcode == 0x22);               // LD [HL+], A
             bool dec_hl_store = (opcode == 0x32);               // LD [HL-], A
 
-            if (is_load_from || opcode == 0x2A || opcode == 0x3A) {
+            if (is_load_from || inc_hl || dec_hl) {
                 u8 value = read_byte(address);
                 load_to_r8(&cpu->A, value);
             } else {
@@ -357,7 +357,7 @@ static void execute_instruction(CPU *cpu, u8 opcode) {
 
             u8 value = read_byte(cpu->PC + 1);
 
-            if (opcode == 0x36) {   // LD [HL], d8
+            if (opcode == 0x36) {               // LD [HL], d8
                 write_byte(cpu->HL, value);
                 cpu->cycles += 12;
                 cpu->PC += 2;
@@ -370,7 +370,7 @@ static void execute_instruction(CPU *cpu, u8 opcode) {
             break;
         }
 
-        case 0x40 ... 0x75: {               // LD r8, (r8 / HL)
+        case 0x40 ... 0x75: {                   // LD r8, (r8 / HL)
             u8 dest_reg_bit = (opcode & DEST_REG_BIT) >> 3;
             u8 src_reg_bit = opcode & SOURCE_REG_BIT;
             u8 *dest_reg = r8_lookup[dest_reg_bit];
@@ -479,7 +479,6 @@ static void execute_instruction(CPU *cpu, u8 opcode) {
         // ============================================= //
 
         case 0x01:              // LD BC, d16
-        case 0x08:              // LD [a16], SP
         case 0x11:              // LD DE, d16
         case 0x21:              // LD HL, d16
         case 0x31: {            // LD SP, d16
@@ -494,15 +493,16 @@ static void execute_instruction(CPU *cpu, u8 opcode) {
 
             u16 value_u16 = read_word(cpu->PC + 1);
 
-            if (opcode == 0x08) {           // LD [a16], SP
-                write_word(value_u16, cpu->SP);
-                cpu->cycles += 20;
-                cpu->PC += 3;
-                break;
-            }
-
             load_to_r16(dest_reg, value_u16);
             cpu->cycles += 12;
+            cpu->PC += 3;
+            break;
+        }
+
+        case 0x08: {            // LD [a16], SP
+            u16 value_u16 = read_word(cpu->PC + 1);
+            write_word(value_u16, cpu->SP);
+            cpu->cycles += 20;
             cpu->PC += 3;
             break;
         }
@@ -809,7 +809,7 @@ static void execute_instruction(CPU *cpu, u8 opcode) {
             break;
         }
 
-        case 0x23: {             // INC HL
+        case 0x23: {            // INC HL
             cpu->cycles += 8;
             cpu->HL += 1;
             cpu->PC += 1;
