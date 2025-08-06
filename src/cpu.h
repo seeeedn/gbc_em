@@ -69,12 +69,12 @@ typedef struct {
     };
 
     u16 SP;                 // Stackpointer register
-
     u16 PC;                 // Program Counter
-    u64 cycles;             // CPU cycles passed
+
+    u32 cycles;             // CPU cycles passed
 
     bool ime;               // "Interrupt Master Enable"
-    u64 ime_delay;          // CPU-steps until IME is enabled after EI-Instruction is being executed
+    u32 ime_delay;          // CPU-steps until IME is enabled after EI-Instruction is being executed
 
     bool halted;
     bool stopped;

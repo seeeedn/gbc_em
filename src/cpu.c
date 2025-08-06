@@ -158,7 +158,7 @@ static void execute_cb_instruction(CPU *cpu, u8 cb_opcode) {
     u8 *r8_lookup[] = { &cpu->B, &cpu->C, &cpu->D, &cpu->E, &cpu->H, &cpu->L, NULL, &cpu->A };
     u16 *r16_lookup[] = { &cpu->BC, &cpu->DE, &cpu->HL, &cpu->SP };
 
-    // pre-calculate necessary varialbes
+    // pre calculate necessary variables
     u8 target_bit_nr = (cb_opcode & DEST_REG_BIT) >> 3;
     u8 target_bit = (1 << target_bit_nr);
     u8 dest_reg_bit = cb_opcode & SOURCE_REG_BIT;
@@ -417,16 +417,9 @@ static void execute_instruction(CPU *cpu, u8 opcode) {
             u8 *dest_reg = r8_lookup[register_bit_mask];
 
             u8 value = read_byte(cpu->PC + 1);
+            write_result(cpu, dest_reg, value);
 
-            if (opcode == 0x36) {               // LD [HL], d8
-                write_byte(cpu->HL, value);
-                cpu->cycles += 12;
-                cpu->PC += 2;
-                break;
-            }
-
-            load_to_r8(dest_reg, value);        // LD r8, d8
-            cpu->cycles += 8;
+            cpu->cycles += (dest_reg == NULL) ? 12 : 8;
             cpu->PC += 2;
             break;
         }
@@ -462,7 +455,6 @@ static void execute_instruction(CPU *cpu, u8 opcode) {
             u8 src_reg_bit = opcode & SOURCE_REG_BIT;
             u8 *dest_reg = r8_lookup[dest_reg_bit];
             u8 *source_reg = r8_lookup[src_reg_bit];
-
 
             if (dest_reg_bit == 0b110) {        // Is true if dest_reg is HL
                 load_to_addr(cpu->HL, *source_reg);
@@ -512,7 +504,7 @@ static void execute_instruction(CPU *cpu, u8 opcode) {
             }
 
             cpu->cycles += 8;
-            cpu->PC += 1;
+            cpu->PC += 2;
             break;
         }
 
@@ -542,18 +534,12 @@ static void execute_instruction(CPU *cpu, u8 opcode) {
         case 0x11:              // LD DE, d16
         case 0x21:              // LD HL, d16
         case 0x31: {            // LD SP, d16
-            u16 *dest_reg = NULL;
-
-            switch (opcode) {
-                case 0x01: dest_reg = &cpu->BC; break;
-                case 0x11: dest_reg = &cpu->DE; break;
-                case 0x21: dest_reg = &cpu->HL; break;
-                case 0x31: dest_reg = &cpu->SP; break;
-            }
+            u8 reg_index = opcode & (3 << 4);
+            u16 *dest_reg = r16_lookup[reg_index];
 
             u16 value_u16 = read_word(cpu->PC + 1);
-
             load_to_r16(dest_reg, value_u16);
+
             cpu->cycles += 12;
             cpu->PC += 3;
             break;
@@ -641,133 +627,64 @@ static void execute_instruction(CPU *cpu, u8 opcode) {
         //         8-bit arithmetic instructions         //
         // ============================================= //
 
-        case 0x04: {            // INC B
-            cpu->cycles += 4;
-            u8 result = cpu->B + 1;
+        case 0x04:
+        case 0x14:
+        case 0x24:
+        case 0x34:              // INC (HL)
+        case 0x0C:
+        case 0x1C:
+        case 0x2C:
+        case 0x3C: {            // INC r8
+            u8 reg_index = (opcode & DEST_REG_BIT) >> 3;
+            u8 *dest_reg = r8_lookup[reg_index];
+
+            u8 value = (dest_reg == NULL) ? read_byte(cpu->HL) : *dest_reg;
+            value += 1;
 
             CLEAR_FLAG(cpu->F, FLAG_Z | FLAG_N | FLAG_H);
-
-            if ((result & 0xFF) == 0)
+            if ((value & 0xFF) == 0)
                 SET_FLAG(cpu->F, FLAG_Z);
             if ((cpu->B & 0x0F) == 0x0F)
                 SET_FLAG(cpu->F, FLAG_H);
 
-            cpu->B = result;
+            write_result(cpu, dest_reg, value);
+
+            cpu->cycles += (dest_reg == NULL) ? 12 : 4;
             cpu->PC += 1;
             break;
         }
 
-        case 0x05: {            // DEC B
-            cpu->cycles += 4;
-            u8 result = cpu->B - 1;
+        case 0x05:
+        case 0x15:
+        case 0x25:
+        case 0x35:              // DEC (HL)
+        case 0x0D:
+        case 0x1D:
+        case 0x2D:
+        case 0x3D: {            // DEC r8
+            u8 reg_index = (opcode & DEST_REG_BIT) >> 3;
+            u8 *dest_reg = r8_lookup[reg_index];
+
+            u8 value = (dest_reg == NULL) ? read_byte(cpu->HL) : *dest_reg;
+            value -= 1;
 
             CLEAR_FLAG(cpu->F, FLAG_Z | FLAG_H);
             SET_FLAG(cpu->F, FLAG_N);
 
-            if ((result & 0xFF) == 0)
+            if ((value & 0xFF) == 0)
                 SET_FLAG(cpu->F, FLAG_Z);
             if ((cpu->B & 0x0F) == 0x10)
                 SET_FLAG(cpu->F, FLAG_H);
 
-            cpu->B = result;
+            write_result(cpu, dest_reg, value);
+
+            cpu->cycles += (dest_reg == NULL) ? 12 : 4;
             cpu->PC += 1;
             break;
         }
 
-        case 0x0C: {            // INC C
-            cpu->cycles += 4;
-            u8 result = cpu->C + 1;
+        case 0x80 ... 0x87: {
 
-            CLEAR_FLAG(cpu->F, FLAG_Z | FLAG_N | FLAG_H);
-
-            if ((result & 0xFF) == 0)
-                SET_FLAG(cpu->F, FLAG_Z);
-            if ((cpu->C & 0x0F) == 0x0F)
-                SET_FLAG(cpu->F, FLAG_H);
-
-            cpu->C = result;
-            cpu->PC += 1;
-            break;
-        }
-
-        case 0x0D: {            // DEC C
-            cpu->cycles += 4;
-            u8 result = cpu->C - 1;
-
-            CLEAR_FLAG(cpu->F, FLAG_Z | FLAG_H);
-            SET_FLAG(cpu->F, FLAG_N);
-
-            if ((result & 0xFF) == 0)
-                SET_FLAG(cpu->F, FLAG_Z);
-            if ((cpu->C & 0x0F) == 0x10)
-                SET_FLAG(cpu->F, FLAG_H);
-
-            cpu->C = result;
-            cpu->PC += 1;
-            break;
-        }
-
-
-        case 0x14: {            // INC D
-            cpu->cycles += 4;
-            u8 result = cpu->D + 1;
-
-            CLEAR_FLAG(cpu->F, FLAG_Z | FLAG_N | FLAG_H);
-
-            if ((result & 0xFF) == 0)
-                SET_FLAG(cpu->F, FLAG_Z);
-            if ((cpu->D & 0x0F) == 0x0F)
-                SET_FLAG(cpu->F, FLAG_H);
-
-            cpu->PC += 1;
-            break;
-        }
-
-        case 0x15: {            // DEC D
-            cpu->cycles += 4;
-            u8 result = cpu->D - 1;
-
-            CLEAR_FLAG(cpu->F, FLAG_Z | FLAG_H);
-            SET_FLAG(cpu->F, FLAG_N);
-
-            if ((result & 0xFF) == 0)
-                SET_FLAG(cpu->F, FLAG_Z);
-            if ((cpu->D & 0x0F) == 0x10)
-                SET_FLAG(cpu->F, FLAG_H);
-
-            cpu->PC += 1;
-            break;
-        }
-
-        case 0x1C: {            // INC E
-            cpu->cycles += 4;
-            u8 result = cpu->E + 1;
-
-            CLEAR_FLAG(cpu->F, FLAG_Z | FLAG_N | FLAG_H);
-
-            if ((result & 0xFF) == 0)
-                SET_FLAG(cpu->F, FLAG_Z);
-            if ((cpu->E & 0x0F) == 0x0F)
-                SET_FLAG(cpu->F, FLAG_H);
-
-            cpu->PC += 1;
-            break;
-        }
-
-        case 0x1D: {            // DEC E
-            cpu->cycles += 4;
-            u8 result = cpu->E - 1;
-
-            CLEAR_FLAG(cpu->F, FLAG_Z | FLAG_H);
-            SET_FLAG(cpu->F, FLAG_N);
-
-            if ((result & 0xFF) == 0)
-                SET_FLAG(cpu->F, FLAG_Z);
-            if ((cpu->E & 0x0F) == 0x10)
-                SET_FLAG(cpu->F, FLAG_H);
-
-            cpu->PC += 1;
-            break;
         }
 
         // TODO: decoding of opcodes 0x80 - 0xBF
@@ -876,129 +793,54 @@ static void execute_instruction(CPU *cpu, u8 opcode) {
         //         16-bit arithmetic instructions        //
         // ============================================= //
 
-        case 0x03: {            // INC BC
+        case 0x03:
+        case 0x13:
+        case 0x23:
+        case 0x33: {            // INC r16
+            u8 reg_mask = (3 << 4);
+            u8 reg_index = opcode & reg_mask;
+            r16_lookup[reg_index] += 1;
             cpu->cycles += 8;
-            cpu->BC += 1;
             cpu->PC += 1;
             break;
         }
 
-        case 0x09: {            // ADD HL, BC
+        case 0x0B:
+        case 0x1B:
+        case 0x2B:
+        case 0x3B: {            // DEC r16
+            u8 reg_mask = (3 << 4);
+            u8 reg_index = opcode & reg_mask;
+            r16_lookup[reg_index] -= 1;
             cpu->cycles += 8;
-            u32 result = cpu->HL + cpu->BC;
+            cpu->PC += 1;
+            break;
+        }
+
+        case 0x09:
+        case 0x19:
+        case 0x29:
+        case 0x39: {            // ADD HL, r16
+            u8 reg_mask = (3 << 4);
+            u8 reg_index = opcode & reg_mask;
+            u16 dest_reg = *r16_lookup[reg_index];
+
+            u32 result = cpu->HL + dest_reg;
 
             CLEAR_FLAG(cpu->F, FLAG_N | FLAG_H | FLAG_C);
-            if ((cpu->HL & 0xFFF) + (cpu->BC & 0xFFF) > 0xFFF)      // Half Carry
+            if ((cpu->HL & 0xFFF) + (dest_reg & 0xFFF) > 0xFFF)      // Half Carry
                 SET_FLAG(cpu->F, FLAG_H);
 
             if (result > 0xFFFF)                                    // Carry
                 SET_FLAG(cpu->F, FLAG_C);
 
             cpu->HL = (u16)result;
-            cpu->PC += 1;
-            break;
-        }
-
-        case 0x0B: {            // DEC BC
-            cpu->cycles += 4;
-            cpu->BC -= 1;
-            cpu->PC += 1;
-            break;
-        }
-
-        case 0x13: {            // INC DE
             cpu->cycles += 8;
-            cpu->DE += 1;
-            cpu->PC += 1;
-            break;
-        }
-
-        case 0x19: {            // ADD HL, DE
-            cpu->cycles += 8;
-            u32 result = cpu->HL + cpu->DE;
-
-            CLEAR_FLAG(cpu->F, FLAG_N | FLAG_H | FLAG_C);
-            if ((cpu->HL & 0xFFF) + (cpu->DE & 0xFFF) > 0xFFF)      // Half Carry
-                SET_FLAG(cpu->F, FLAG_H);
-
-            if (result > 0xFFFF)                                    // Carry
-                SET_FLAG(cpu->F, FLAG_C);
-
-            cpu->HL = (u16)result;
-            cpu->PC += 1;
-            break;
-        }
-
-        case 0x1B: {            // DEC DE
-            cpu->cycles += 8;
-            cpu->DE -= 1;
-            cpu->PC += 1;
-            break;
-        }
-
-        case 0x23: {            // INC HL
-            cpu->cycles += 8;
-            cpu->HL += 1;
-            cpu->PC += 1;
-            break;
-        }
-
-        case 0x29: {            // ADD HL, HL
-            cpu->cycles += 8;
-            u32 result = cpu->HL + cpu->HL;
-
-            CLEAR_FLAG(cpu->F, FLAG_N | FLAG_H | FLAG_C);
-            if ((cpu->HL & 0xFFF) + (cpu->HL & 0xFFF) > 0xFFF)      // Half Carry
-                SET_FLAG(cpu->F, FLAG_H);
-
-            if (result > 0xFFFF)                                    // Carry
-                SET_FLAG(cpu->F, FLAG_C);
-
-            cpu->HL = (u16)result;
-            cpu->PC += 1;
-            break;
-        }
-
-        case 0x2B: {            // DEC HL
-            cpu->cycles += 8;
-            cpu->HL -= 1;
-            cpu->PC += 1;
-            break;
-        }
-
-        case 0x33: {            // INC SP
-            cpu->cycles += 8;
-            cpu->SP += 1;
-            cpu->PC += 1;
-            break;
-        }
-
-        case 0x39: {            // ADD HL, SP
-            cpu->cycles += 8;
-            u32 result = cpu->HL + cpu->SP;
-
-            CLEAR_FLAG(cpu->F, FLAG_N | FLAG_H | FLAG_C);
-            if ((cpu->HL & 0x0FFF) + (cpu->SP & 0x0FFF) > 0x0FFF)      // Half Carry
-                SET_FLAG(cpu->F, FLAG_H);
-
-            if (result > 0xFFFF)                                    // Carry
-                SET_FLAG(cpu->F, FLAG_C);
-
-            cpu->HL = (u16)result;
-            cpu->PC += 1;
-            break;
-        }
-
-        case 0x3B: {            // DEC SP
-            cpu->cycles += 8;
-            cpu->SP -= 1;
             cpu->PC += 1;
             break;
         }
 
         case 0xE8: {            // ADD SP, r8
-            cpu->cycles += 16;
-
             i8 value = read_byte_signed(cpu->PC + 1);
             u32 result = cpu->SP + value;
 
@@ -1010,6 +852,7 @@ static void execute_instruction(CPU *cpu, u8 opcode) {
                 SET_FLAG(cpu->F, FLAG_C);
 
             cpu->SP = (u16)result;
+            cpu->cycles += 16;
             cpu->PC += 2;
             break;
         }
