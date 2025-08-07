@@ -31,8 +31,8 @@ extern u8 memory[MEM_SIZE];
 #define IS_BIT_SET(reg, bit)        (((reg) & (bit)) != 0)
 #define IS_BIT_CLEAR(reg, bit)      (((reg) & (bit)) == 0)
 
-#define DEST_REG_BIT (7 << 3)   // 0b111000
-#define SOURCE_REG_BIT 7        // 0b000111
+#define DEST_REG_BIT    (7 << 3)    // 0b00111000
+#define SOURCE_REG_BIT  7           // 0b00000111
 
 typedef struct {
 
@@ -71,10 +71,10 @@ typedef struct {
     u16 SP;                 // Stackpointer register
     u16 PC;                 // Program Counter
 
-    u32 cycles;             // CPU cycles passed
+    u64 cycles;             // CPU cycles passed
 
     bool ime;               // "Interrupt Master Enable"
-    u32 ime_delay;          // CPU-steps until IME is enabled after EI-Instruction is being executed
+    u8 ime_delay;          // CPU-steps until IME is enabled after EI-Instruction is being executed
 
     bool halted;
     bool stopped;

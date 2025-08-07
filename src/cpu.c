@@ -475,14 +475,14 @@ static void execute_instruction(CPU *cpu, u8 opcode) {
             break;
         }
 
-        case 0xE0:
-        case 0xF0: {
+        case 0xE0:              // LDH (0xFF00 + a8), A
+        case 0xF0: {            // LDH A, (0xFF00 + a8)
             u8 offset = read_byte(cpu->PC + 1);
             u16 address = 0xFF00 + offset;
 
-            if (opcode == 0xE0) {               // LDH [0xFF00 + a8], A
+            if (opcode == 0xE0) {
                 write_byte(address, cpu->A);
-            } else {                            // LDH A, [0xFF00 + a8]
+            } else {
                 u8 value = read_byte(address);
                 load_to_r8(&cpu->A, value);
             }
@@ -492,13 +492,13 @@ static void execute_instruction(CPU *cpu, u8 opcode) {
             break;
         }
 
-        case 0xE2:
-        case 0xF2: {
+        case 0xE2:              // LD (0xFF00 + C), A
+        case 0xF2: {            // LD A, (0xFF00 + C)
             u16 address = 0xFF00 + cpu->C;
 
-            if (opcode == 0xE2) {               // LD [0xFF00 + C], A
+            if (opcode == 0xE2) {
                 write_byte(address, cpu->A);
-            } else {                            // LD A, [0xFF00 + C]
+            } else {
                 u8 value = read_byte(address);
                 load_to_r8(&cpu->A, value);
             }
@@ -508,13 +508,13 @@ static void execute_instruction(CPU *cpu, u8 opcode) {
             break;
         }
 
-        case 0xEA:
-        case 0xFA: {
+        case 0xEA:              // LDH (a16), A
+        case 0xFA: {            // LDH A, (a16)
             u16 address = read_word(cpu->PC);
 
-            if (opcode == 0xEA) {               // LDH [a16], A
+            if (opcode == 0xEA) {
                 write_byte(address, cpu->A);
-            } else {                            // LDH A, [a16]
+            } else {
                 u8 value = read_byte(address);
                 load_to_r8(&cpu->A, value);
             }
@@ -534,7 +534,7 @@ static void execute_instruction(CPU *cpu, u8 opcode) {
         case 0x11:              // LD DE, d16
         case 0x21:              // LD HL, d16
         case 0x31: {            // LD SP, d16
-            u8 reg_index = opcode & (3 << 4);
+            u8 reg_index = (opcode & 0x30) >> 4;
             u16 *dest_reg = r16_lookup[reg_index];
 
             u16 value_u16 = read_word(cpu->PC + 1);
@@ -545,7 +545,7 @@ static void execute_instruction(CPU *cpu, u8 opcode) {
             break;
         }
 
-        case 0x08: {            // LD [a16], SP
+        case 0x08: {            // LD (a16), SP
             u16 value_u16 = read_word(cpu->PC + 1);
             write_word(value_u16, cpu->SP);
             cpu->cycles += 20;
@@ -598,10 +598,9 @@ static void execute_instruction(CPU *cpu, u8 opcode) {
         }
 
         case 0xF8: {            // LD HL, SP + r8
-            cpu->cycles += 12;
-
             i8 offset = read_byte_signed(cpu->PC + 1);
             u16 value = cpu->SP + offset;
+
             cpu->HL = value;
 
             CLEAR_ALL_FLAGS(cpu->F);
@@ -610,6 +609,7 @@ static void execute_instruction(CPU *cpu, u8 opcode) {
             if (((cpu->SP & 0x0F) + (offset & 0x0F)) > 0x0F)
                 SET_FLAG(cpu->F, FLAG_H);
 
+            cpu->cycles += 12;
             cpu->PC += 2;
             break;
         }
@@ -683,106 +683,195 @@ static void execute_instruction(CPU *cpu, u8 opcode) {
             break;
         }
 
-        case 0x80 ... 0x87: {
+        case 0x27: {            // DAA "Decimal adjust accumulator"
+            CLEAR_FLAG(cpu->F, FLAG_Z | FLAG_H | FLAG_C);
 
-        }
+            u8 lower_nibble = (cpu->A & 0x0F);
+            u8 upper_nibble = (cpu->A & 0xF0);
 
-        // TODO: decoding of opcodes 0x80 - 0xBF
-        case 0xA0 ... 0xA7: {   // AND r8
-            u8 src_reg_bit = opcode & SOURCE_REG_BIT;
-            u8 source_reg = *r8_lookup[src_reg_bit];
+            // TODO
 
-            if (src_reg_bit == 0b110) {
-                u8 value = read_byte(cpu->HL);
-                and_r8(cpu, value);
-                cpu->cycles += 8;
-            } else {
-                and_r8(cpu, source_reg);
-                cpu->cycles += 4;
-            }
-
+            cpu->cycles += 4;
             cpu->PC += 1;
             break;
         }
 
-        case 0xE6: {            // AND d8
+        case 0x2F: {            // CPL "Complement accumulator"
+            SET_FLAG(cpu->F, FLAG_N | FLAG_H);
+            cpu->A = ~cpu->A;
+            cpu->cycles += 4;
+            cpu->PC += 1;
+            break;
+        }
+
+        case 0x37: {            // SCF "Set carry flag"
+            CLEAR_FLAG(cpu->F, FLAG_N | FLAG_H);
+            SET_FLAG(cpu->F, FLAG_C);
+            cpu->cycles += 4;
+            cpu->PC += 1;
+            break;
+        }
+
+        case 0x3F: {            // CCF "Complement carry flag"
+            CLEAR_FLAG(cpu->F, FLAG_N | FLAG_H);
+            cpu->F ^= FLAG_C;
+            cpu->cycles += 4;
+            cpu->PC += 1;
+            break;
+        }
+
+        case 0x80 ... 0x8F: {   // ADD r8, r8 / ADC r8 r,8
+            u8 src_reg_index = opcode & SOURCE_REG_BIT;
+            u8 *src_reg = r8_lookup[src_reg_index];
+            u8 value = (src_reg == NULL) ? read_byte(cpu->HL) : *src_reg;
+
+            bool is_adc = opcode > 0x87;
+            u8 carry = is_adc & IS_FLAG_SET(cpu->F, FLAG_C);
+
+            u16 result = cpu->A + value + carry;
+
+            CLEAR_ALL_FLAGS(cpu->F);
+            if ((u8)result == 0)
+                SET_FLAG(cpu->F, FLAG_Z);
+            if (result > 0x0F)
+                SET_FLAG(cpu->F, FLAG_H);
+            if (result > 0xFF)
+                SET_FLAG(cpu->F, FLAG_C);
+
+            cpu->A = (u8)result;
+            cpu->cycles += (src_reg == NULL) ? 8 : 4;
+            cpu->PC += 1;
+            break;
+        }
+
+        case 0xC6:              // ADD A, d8
+        case 0xCE: {            // ADC A, d8
             u8 value = read_byte(cpu->PC + 1);
-            and_r8(cpu, value);
+
+            bool is_adc = opcode == 0xCE;
+            u8 carry = is_adc & IS_FLAG_SET(cpu->F, FLAG_C);
+
+            u16 result = cpu->A + value + carry;
+
+            CLEAR_ALL_FLAGS(cpu->F);
+            if ((u8)result == 0)
+                SET_FLAG(cpu->F, FLAG_Z);
+            if (result > 0x0F)
+                SET_FLAG(cpu->F, FLAG_H);
+            if (result > 0xFF)
+                SET_FLAG(cpu->F, FLAG_C);
+
+            cpu->A = (u8)result;
             cpu->cycles += 8;
             cpu->PC += 2;
             break;
         }
 
-        case 0xA8 ... 0xAF: {   // XOR r8
-            u8 src_reg_bit = opcode & SOURCE_REG_BIT;
-            u8 source_reg = *r8_lookup[src_reg_bit];
+        case 0x90 ... 0x9F: {   // SUB A, r8 / SBC A, r8
+            u8 src_reg_index = opcode & SOURCE_REG_BIT;
+            u8 *src_reg = r8_lookup[src_reg_index];
+            u8 value = (src_reg == NULL) ? read_byte(cpu->HL) : *src_reg;
 
-            if (src_reg_bit == 0b110) {
-                u8 value = read_byte(cpu->HL);
-                xor_r8(cpu, value);
-                cpu->cycles += 8;
-            } else {
-                xor_r8(cpu, source_reg);
-                cpu->cycles += 4;
-            }
+            bool is_sbc = opcode > 0x97;
+            u8 carry = is_sbc & IS_FLAG_SET(cpu->F, FLAG_C);
 
+            u16 result = cpu->A - (value + carry);
+
+            CLEAR_ALL_FLAGS(cpu->F);
+            SET_FLAG(cpu->F, FLAG_N);
+            if ((u8)result == 0)
+                SET_FLAG(cpu->F, FLAG_Z);
+            if (result > 0x0F)                  // TODO: correct these flags
+                SET_FLAG(cpu->F, FLAG_H);
+            if (result > 0xFF)
+                SET_FLAG(cpu->F, FLAG_C);
+
+            cpu->A = (u8)result;
+            cpu->cycles += (src_reg == NULL) ? 8 : 4;
             cpu->PC += 1;
             break;
         }
 
-        case 0xEE: {            // XOR d8
+        case 0xD6:              // SUB A, r8
+        case 0xDE: {            // SBC A, r8
             u8 value = read_byte(cpu->PC + 1);
-            xor_r8(cpu, value);
+
+            bool is_sbc = opcode == 0xDE;
+            u8 carry = is_sbc & IS_FLAG_SET(cpu->F, FLAG_C);
+
+            u16 result = cpu->A - (value + carry);
+
+            CLEAR_ALL_FLAGS(cpu->F);
+            SET_FLAG(cpu->F, FLAG_N);
+            if ((u8)result == 0)
+                SET_FLAG(cpu->F, FLAG_Z);
+            if (result > 0x0F)                  // TODO: correct these flags
+                SET_FLAG(cpu->F, FLAG_H);
+            if (result > 0xFF)
+                SET_FLAG(cpu->F, FLAG_C);
+
+            cpu->A = (u8)result;
             cpu->cycles += 8;
             cpu->PC += 2;
             break;
         }
 
-        case 0xB0 ... 0xB7: {   // OR r8
-            u8 src_reg_bit = opcode & SOURCE_REG_BIT;
-            u8 source_reg = *r8_lookup[src_reg_bit];
+        case 0xA0 ... 0xBF: {   // AND r8 / XOR r8 / OR r8 / CP r8
+            u8 src_reg_index = opcode & SOURCE_REG_BIT;
+            u8 *src_reg = r8_lookup[src_reg_index];
+            u8 value = (src_reg == NULL) ? read_byte(cpu->HL) : *src_reg;
+            u8 opcode_index = (opcode & 0x18) >> 4;
 
-            if (src_reg_bit == 0b110) {
-                u8 value = read_byte(cpu->HL);
-                or_r8(cpu, value);
-                cpu->cycles += 8;
-            } else {
-                or_r8(cpu, source_reg);
-                cpu->cycles += 4;
+            switch (opcode_index) {
+                case 0: {
+                    and_r8(cpu, value);
+                    break;
+                }
+                case 1: {
+                    xor_r8(cpu, value);
+                    break;
+                }
+                case 2: {
+                    or_r8(cpu, value);
+                    break;
+                }
+                case 3: {
+                    cp_r8(cpu, value);
+                    break;
+                }
             }
 
+            cpu->cycles += (src_reg == NULL) ? 8 : 4;
             cpu->PC += 1;
             break;
         }
 
-        case 0xF6: {            // OR d8
-            u8 value = read_byte(cpu->PC + 1);
-            or_r8(cpu, value);
-            cpu->cycles += 8;
-            cpu->PC += 2;
-            break;
-        }
-
-        case 0xB8 ... 0xBF: {   // CP r8
-            u8 src_reg_bit = opcode & SOURCE_REG_BIT;
-            u8 source_reg = *r8_lookup[src_reg_bit];
-
-            if (src_reg_bit == 0b110) {     // CP HL
-                u8 value = read_byte(cpu->HL);
-                cp_r8(cpu, value);
-                cpu->cycles += 8;
-            } else {
-                cp_r8(cpu, source_reg);
-                cpu->cycles += 4;
-            }
-
-            cpu->PC += 1;
-            break;
-        }
-
+        case 0xE6:              // AND d8
+        case 0xEE:              // XOR d8
+        case 0xF6:              // OR d8
         case 0xFE: {            // CP d8
             u8 value = read_byte(cpu->PC + 1);
-            cp_r8(cpu, value);
+            u8 opcode_index = (opcode & 0x18) >> 3;
+
+            switch (opcode_index) {
+                case 0: {
+                    and_r8(cpu, value);
+                    break;
+                }
+                case 1: {
+                    xor_r8(cpu, value);
+                    break;
+                }
+                case 2: {
+                    or_r8(cpu, value);
+                    break;
+                }
+                case 3: {
+                    cp_r8(cpu, value);
+                    break;
+                }
+            }
+
             cpu->cycles += 8;
             cpu->PC += 2;
             break;
@@ -797,8 +886,7 @@ static void execute_instruction(CPU *cpu, u8 opcode) {
         case 0x13:
         case 0x23:
         case 0x33: {            // INC r16
-            u8 reg_mask = (3 << 4);
-            u8 reg_index = opcode & reg_mask;
+            u8 reg_index = (opcode & 0x30) >> 4;
             r16_lookup[reg_index] += 1;
             cpu->cycles += 8;
             cpu->PC += 1;
@@ -809,8 +897,7 @@ static void execute_instruction(CPU *cpu, u8 opcode) {
         case 0x1B:
         case 0x2B:
         case 0x3B: {            // DEC r16
-            u8 reg_mask = (3 << 4);
-            u8 reg_index = opcode & reg_mask;
+            u8 reg_index = (opcode & 0x30) >> 4;
             r16_lookup[reg_index] -= 1;
             cpu->cycles += 8;
             cpu->PC += 1;
@@ -821,16 +908,14 @@ static void execute_instruction(CPU *cpu, u8 opcode) {
         case 0x19:
         case 0x29:
         case 0x39: {            // ADD HL, r16
-            u8 reg_mask = (3 << 4);
-            u8 reg_index = opcode & reg_mask;
+            u8 reg_index = (opcode & 0x30) >> 4;
             u16 dest_reg = *r16_lookup[reg_index];
 
             u32 result = cpu->HL + dest_reg;
 
             CLEAR_FLAG(cpu->F, FLAG_N | FLAG_H | FLAG_C);
-            if ((cpu->HL & 0xFFF) + (dest_reg & 0xFFF) > 0xFFF)      // Half Carry
+            if ((cpu->HL & 0xFFF) + (dest_reg & 0xFFF) > 0xFFF)     // Half Carry
                 SET_FLAG(cpu->F, FLAG_H);
-
             if (result > 0xFFFF)                                    // Carry
                 SET_FLAG(cpu->F, FLAG_C);
 
@@ -847,7 +932,6 @@ static void execute_instruction(CPU *cpu, u8 opcode) {
             CLEAR_ALL_FLAGS(cpu->F);
             if ((cpu->SP & 0x0F) + (cpu->SP & 0x0F) > 0x0F)        // Half Carry
                 SET_FLAG(cpu->F, FLAG_H);
-
             if (((cpu->SP & 0xFF) + (value & 0xFF)) > 0xFF)        // Carry
                 SET_FLAG(cpu->F, FLAG_C);
 
