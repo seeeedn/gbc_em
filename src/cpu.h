@@ -46,7 +46,7 @@ typedef struct {
 
     union {
         struct {
-            u8 C;           // 8-bit General Purpose Register
+            u8 C;           // 8-bit register
             u8 B;
         };
         u16 BC;             // 16-bit register comprised out of two 8-bit registers
@@ -57,7 +57,7 @@ typedef struct {
             u8 E;
             u8 D;
         };
-        u16 DE;             // 16-bit register comprised out of two 8-bit registers
+        u16 DE;
     };
 
     union {
@@ -65,7 +65,7 @@ typedef struct {
             u8 L;
             u8 H;
         };
-        u16 HL;             // 16-bit register comprised out of two 8-bit registers
+        u16 HL;
     };
 
     u16 SP;                 // Stackpointer register
@@ -74,7 +74,7 @@ typedef struct {
     u64 cycles;             // CPU cycles passed
 
     bool ime;               // "Interrupt Master Enable"
-    u8 ime_delay;          // CPU-steps until IME is enabled after EI-Instruction is being executed
+    u8 ime_delay;           // CPU-steps until IME is enabled after EI-Instruction is being executed
 
     bool halted;
     bool stopped;

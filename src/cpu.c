@@ -32,10 +32,6 @@ static inline u16 read_word(u16 address) {
     return (read_byte(address + 1) << 8) | read_byte(address);
 }
 
-static inline i16 read_word_signed(u16 address) {
-    return (i16)((read_byte(address + 1) << 8) | read_byte(address));
-}
-
 static inline void write_byte(u16 address, u8 value) {
     memory[address] = value;
 }
@@ -43,25 +39,6 @@ static inline void write_byte(u16 address, u8 value) {
 static inline void write_word(u16 address, u16 value) {
     write_byte(address, (u8)(value & 0xFF));
     write_byte(address + 1, (u8)(value >> 8));
-}
-
-// ============================================= //
-//                 Load Functions                //
-// ============================================= //
-static inline void load_to_r8(u8 *dest_reg, u8 source_reg) {
-    *dest_reg = source_reg;
-}
-
-static inline void load_to_r16(u16 *dest_reg, u16 value) {
-    *dest_reg = value;
-}
-
-static inline void load_hl(u8 *dest_reg, u16 address) {
-    *dest_reg = read_byte(address);
-}
-
-static inline void load_to_addr(u16 address, u8 source_reg) {
-    write_byte(address, source_reg);
 }
 
 // ============================================= //
@@ -106,32 +83,10 @@ static void cp_r8(CPU *cpu, u8 reg) {
 
     if (result == 0)
         SET_FLAG(cpu->F, FLAG_Z);
-
     if ((cpu->A & 0x0F) < (reg & 0x0F))
         SET_FLAG(cpu->F, FLAG_H);
-
     if (cpu->A < reg)
         SET_FLAG(cpu->F, FLAG_C);
-}
-
-// ============================================= //
-//               Bitwise Functions               //
-// ============================================= //
-static inline void set_bit(u8 target_bit, u8 *reg) {
-    *reg |= (1 << target_bit);
-}
-
-static inline void reset_bit(u8 target_bit, u8 *reg) {
-    *reg &= ~(1 << target_bit);
-}
-
-static inline void toggle_bit(u8 target_bit, u8 *reg) {
-    *reg ^= (1 << target_bit);
-}
-
-static inline bool test_bit_set(u8 target_bit, u8 *reg) {
-    u8 bit = (1 << target_bit);
-    return IS_BIT_SET(*reg, bit);
 }
 
 // ============================================= //
@@ -392,7 +347,7 @@ static void execute_instruction(CPU *cpu, u8 opcode) {
 
             if (is_load_from || inc_hl || dec_hl) {
                 u8 value = read_byte(address);
-                load_to_r8(&cpu->A, value);
+                cpu->A = value;
             } else {
                 write_byte(address, cpu->A);
             }
@@ -431,20 +386,20 @@ static void execute_instruction(CPU *cpu, u8 opcode) {
             u8 *source_reg = r8_lookup[src_reg_bit];
 
             if (dest_reg_bit == 0b110) {        // Is true if dest_reg is HL
-                load_to_addr(cpu->HL, *source_reg);
+                write_byte(cpu->HL, *source_reg);
                 cpu->cycles += 8;
                 cpu->PC += 1;
                 break;
             }
 
             if (src_reg_bit == 0b110) {         // Is true if source_reg is HL
-                load_hl(dest_reg, cpu->HL);
+                *dest_reg = read_byte(cpu->HL);
                 cpu->cycles += 8;
                 cpu->PC += 1;
                 break;
             }
 
-            load_to_r8(dest_reg, *source_reg);
+            *dest_reg = *source_reg;
             cpu->cycles += 4;
             cpu->PC += 1;
             break;
@@ -457,19 +412,19 @@ static void execute_instruction(CPU *cpu, u8 opcode) {
             u8 *source_reg = r8_lookup[src_reg_bit];
 
             if (dest_reg_bit == 0b110) {        // Is true if dest_reg is HL
-                load_to_addr(cpu->HL, *source_reg);
+                write_byte(cpu->HL, *source_reg);
                 cpu->cycles += 8;
                 cpu->PC += 1;
                 break;
             }
             if (src_reg_bit == 0b110) {         // Is true if source_reg is HL
-                load_hl(dest_reg, cpu->HL);
+                *dest_reg = read_byte(cpu->HL);
                 cpu->cycles += 8;
                 cpu->PC += 1;
                 break;
             }
 
-            load_to_r8(dest_reg, *source_reg);
+            *dest_reg = *source_reg;
             cpu->cycles += 4;
             cpu->PC += 1;
             break;
@@ -484,7 +439,7 @@ static void execute_instruction(CPU *cpu, u8 opcode) {
                 write_byte(address, cpu->A);
             } else {
                 u8 value = read_byte(address);
-                load_to_r8(&cpu->A, value);
+                cpu->A = value;
             }
 
             cpu->cycles += 12;
@@ -500,7 +455,7 @@ static void execute_instruction(CPU *cpu, u8 opcode) {
                 write_byte(address, cpu->A);
             } else {
                 u8 value = read_byte(address);
-                load_to_r8(&cpu->A, value);
+                cpu->A = value;
             }
 
             cpu->cycles += 8;
@@ -516,7 +471,7 @@ static void execute_instruction(CPU *cpu, u8 opcode) {
                 write_byte(address, cpu->A);
             } else {
                 u8 value = read_byte(address);
-                load_to_r8(&cpu->A, value);
+                cpu->A = value;
             }
 
             cpu->cycles += 16;
@@ -538,7 +493,7 @@ static void execute_instruction(CPU *cpu, u8 opcode) {
             u16 *dest_reg = r16_lookup[reg_index];
 
             u16 value_u16 = read_word(cpu->PC + 1);
-            load_to_r16(dest_reg, value_u16);
+            *dest_reg = value_u16;
 
             cpu->cycles += 12;
             cpu->PC += 3;
@@ -567,7 +522,7 @@ static void execute_instruction(CPU *cpu, u8 opcode) {
             }
 
             u16 value = read_word(cpu->SP);
-            load_to_r16(dest_reg, value);
+            *dest_reg = value;
 
             cpu->SP += 2;           // Increment Stackpointer
             cpu->cycles += 12;
@@ -615,7 +570,7 @@ static void execute_instruction(CPU *cpu, u8 opcode) {
         }
 
         case 0xF9: {            // LD SP, HL
-            load_to_r16(&cpu->SP, cpu->HL);
+            cpu->SP = cpu->HL;
             cpu->cycles += 8;
             cpu->PC += 1;
             break;
@@ -820,7 +775,7 @@ static void execute_instruction(CPU *cpu, u8 opcode) {
             u8 src_reg_index = opcode & SOURCE_REG_BIT;
             u8 *src_reg = r8_lookup[src_reg_index];
             u8 value = (src_reg == NULL) ? read_byte(cpu->HL) : *src_reg;
-            u8 opcode_index = (opcode & 0x18) >> 4;
+            u8 opcode_index = (opcode & 0x18) >> 3;
 
             switch (opcode_index) {
                 case 0: {
@@ -1009,60 +964,59 @@ static void execute_instruction(CPU *cpu, u8 opcode) {
         //            Jump and Call instructions         //
         // ============================================= //
 
-        case 0x18: {            // JR r8
-            cpu->cycles += 12;
+        case 0x18: {            // JR i8
             i8 offset = read_byte_signed(cpu->PC + 1);
-            cpu->PC += 2;               // Advance PC past the instuction
-            cpu->PC += offset;          // Apply the offset
+            cpu->cycles += 12;
+            cpu->PC += 2 + offset;               // Advance PC past the instuction and apply the offset
             break;
         }
 
-        case 0x20: {            // JR NZ, r8
-            if (IS_FLAG_CLEAR(cpu->F, FLAG_Z)) {        // if Z-flag is clear move to the offset
+        case 0x20:
+        case 0x28:
+        case 0x30:
+        case 0x38: {            // JR cond, i8
+            u8 cond = (opcode & 0x18) >> 3;
+            i8 offset = read_byte_signed(cpu->PC + 1);
+
+            if ((cond == 0 && IS_FLAG_CLEAR(cpu->F, FLAG_Z)) ||
+                (cond == 1 && IS_FLAG_SET(cpu->F, FLAG_Z)) ||
+                (cond == 2 && IS_FLAG_CLEAR(cpu->F, FLAG_C)) ||
+                (cond == 3 && IS_FLAG_SET(cpu->F, FLAG_C)))
+            {
                 cpu->cycles += 12;
-                i8 offset = read_byte_signed(cpu->PC + 1);
-                cpu->PC += 2;
-                cpu->PC += offset;
-            } else {                                    // else just increment cycles and PC
+                cpu->PC += 2 + offset;
+            } else {
                 cpu->cycles += 8;
                 cpu->PC += 2;
             }
             break;
         }
 
-        case 0x28: {            // JR Z, r8
-            if (IS_FLAG_SET(cpu->F, FLAG_Z)) {          // if Z-flag is set move to the offset
-                cpu->cycles += 12;
-                i8 offset = read_byte_signed(cpu->PC + 1);
-                cpu->PC += offset;
-            } else {                                    // else just increment cycles and PC
-                cpu->cycles += 8;
-            }
-            cpu->PC += 2;
+        case 0xC3: {            // JP a16
+            u16 address = read_word(cpu->PC + 1);
+            cpu->PC = address;
+            cpu->cycles += 16;
             break;
         }
 
-        case 0x30: {            // JR NC, r8
-            if (IS_FLAG_CLEAR(cpu->F, FLAG_C)) {        // if C-flag is clear move to the offset
-                cpu->cycles += 12;
-                i8 offset = read_byte_signed(cpu->PC + 1);
-                cpu->PC += offset;
-            } else {                                    // else just increment cycles and PC
-                cpu->cycles += 8;
-            }
-            cpu->PC += 2;
-            break;
-        }
+        case 0xC2:
+        case 0xCA:
+        case 0xD2:
+        case 0xDA: {            // JP cond, a16
+            u8 cond = (opcode & 0x18) >> 3;
+            u16 address = read_word(cpu->PC + 1);
 
-        case 0x38: {            // JR C, r8
-            if (IS_FLAG_SET(cpu->F, FLAG_C)) {          // if C-flag is set move to the offset
+            if ((cond == 0 && IS_FLAG_CLEAR(cpu->F, FLAG_Z)) ||
+                (cond == 1 && IS_FLAG_SET(cpu->F, FLAG_Z)) ||
+                (cond == 2 && IS_FLAG_CLEAR(cpu->F, FLAG_C)) ||
+                (cond == 3 && IS_FLAG_SET(cpu->F, FLAG_C)))
+            {
+                cpu->cycles += 16;
+                cpu->PC = address;
+            } else {
                 cpu->cycles += 12;
-                i8 offset = read_byte_signed(cpu->PC + 1);
-                cpu->PC += offset;
-            } else {                                    // else just increment cycles and PC
-                cpu->cycles += 8;
+                cpu->PC += 3;
             }
-            cpu->PC += 2;
             break;
         }
 
