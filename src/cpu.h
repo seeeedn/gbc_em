@@ -31,8 +31,8 @@ extern u8 memory[MEM_SIZE];
 #define IS_BIT_SET(reg, bit)        (((reg) & (bit)) != 0)
 #define IS_BIT_CLEAR(reg, bit)      (((reg) & (bit)) == 0)
 
-#define DEST_REG_BIT    (7 << 3)    // 0b00111000
-#define SOURCE_REG_BIT  7           // 0b00000111
+#define DEST_REG_BIT    0x38    // 0b00111000
+#define SOURCE_REG_BIT  0x07    // 0b00000111
 
 typedef struct {
 
