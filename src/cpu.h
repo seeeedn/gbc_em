@@ -2,6 +2,7 @@
 #define CPU_H
 
 #include "utils.h"
+#include "mmu.h"
 
 #define MEM_SIZE 0x10000
 extern u8 memory[MEM_SIZE];
