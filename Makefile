@@ -1,2 +1,10 @@
+CC := gcc
+
+TARGET := gbc
+
+SRC :=  src/main.c \
+		src/cpu.c \
+	 	src/mmu.c
+
 all:
-	C:\msys64\mingw64\bin\gcc.exe -Iinclude -Llib -o test.exe src/main.c src/cpu.c
+	$(CC) -Iinclude -Llib -o $(TARGET) $(SRC) -IC:/SDL2/include -LC:/SDL2/lib -lmingw32 -lSDL2main -lSDL2

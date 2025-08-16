@@ -4,9 +4,6 @@
 #include "utils.h"
 #include "mmu.h"
 
-#define MEM_SIZE 0x10000
-extern u8 memory[MEM_SIZE];
-
 #define FLAG_Z (1 << 7)     // 7th bit of the F register
 #define FLAG_N (1 << 6)     // 6th bit of the F register
 #define FLAG_H (1 << 5)     // 5th bit of the F register

@@ -3,6 +3,7 @@
 
 #include "utils.h"
 
+// MEMORY START/END LOCATIONS
 #define BANK_0_START    0x0000
 #define BANK_0_END      0x3FFF
 #define BANK_N_START    0x4000
@@ -35,6 +36,10 @@
 #define HRAM_END        0xFFFE
 
 #define IE_ADDRESS      0xFFFF
+
+// FLAG/REG LOCATIONS
+#define VBK_INDEX       0xFF4F
+#define WBK_INDEX       0xFF70
 
 extern u8* rom_banks;                  // Full ROM, dynamically loaded
 extern u32 rom_size;

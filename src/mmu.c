@@ -1,8 +1,26 @@
 #include "mmu.h"
 
+u8* rom_banks = 0;
+u32 rom_size = 0;
+u8 current_rom_bank = 0;
+
+u8 current_vram_bank = 0;
+u8 current_wram_bank = 0;
+
+u8 vram[2][0x2000] = {0};
+u8 ext_ram[0x2000] = {0};
+
+u8 wram0[0x1000] = {0};
+u8 wram_switchable[7][0x1000] = {0};
+
+u8 oam[0xA0] = {0};
+u8 io_regs[0x80] = {0};
+u8 hram[0x7F] = {0};
+u8 interrupt_enable = 0;
+
 void mmu_write_byte(u16 address, u8 value) {
-    current_vram_bank = io_regs[0xFF4F - IO_REGS_START];    // TODO: make special regs CONSTANTS
-    current_wram_bank = io_regs[0xFF70 - IO_REGS_START];
+    current_vram_bank = io_regs[VBK_INDEX - IO_REGS_START] & 0x1;
+    current_wram_bank = io_regs[WBK_INDEX - IO_REGS_START] & 0x7;
     if (current_wram_bank == 0)
         current_wram_bank = 1;
 
@@ -32,8 +50,7 @@ void mmu_write_byte(u16 address, u8 value) {
         oam[address - OAM_START] = value;
     }
     else if (address >= UNUSED_START && address <= UNUSED_END) {
-        // ignore writes to this area
-        return;
+        return;         // ignore writes to this area
     }
     else if (address >= IO_REGS_START && address <= IO_REGS_END) {
         io_regs[address - IO_REGS_START] = value;
@@ -51,8 +68,8 @@ void mmu_write_byte(u16 address, u8 value) {
 }
 
 u8 mmu_read_byte(u16 address) {
-    current_vram_bank = io_regs[0xFF4F - IO_REGS_START];    // TODO: make special regs CONSTANTS
-    current_wram_bank = io_regs[0xFF70 - IO_REGS_START];
+    current_vram_bank = io_regs[VBK_INDEX - IO_REGS_START] & 0x1;
+    current_wram_bank = io_regs[WBK_INDEX - IO_REGS_START] & 0x7;
     if (current_wram_bank == 0)
         current_wram_bank = 1;
     u8 value = 0;
@@ -83,8 +100,8 @@ u8 mmu_read_byte(u16 address) {
         value = oam[address - OAM_START];
     }
     else if (address >= UNUSED_START && address <= UNUSED_END) {
-        // TODO: refer to doc
-        return 0xFF;
+        u8 addr_nibble = address & 0x00F0;
+        value = addr_nibble + (addr_nibble >> 4);       // reads here return upper nibble of lower address-byte twice (e.g 0xAA for addr. 0xFFAx)
     }
     else if (address >= IO_REGS_START && address <= IO_REGS_END) {
         value = io_regs[address - IO_REGS_START];

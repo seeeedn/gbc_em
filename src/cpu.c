@@ -2,8 +2,6 @@
 #include <stdbool.h>
 #include <stdio.h>
 
-u8 memory[MEM_SIZE] = {0};
-
 void init_cpu(CPU *cpu) {
     cpu->AF = 0x01B0;
     cpu->BC = 0x0013;
@@ -22,24 +20,23 @@ void init_cpu(CPU *cpu) {
 //             Read & Write Functions            //
 // ============================================= //
 static inline u8 read_byte(u16 address) {
-    return memory[address];
+    return mmu_read_byte(address);
 }
 
 static inline i8 read_byte_signed(u16 address) {
-    return (i8)memory[address];
+    return (i8)mmu_read_byte(address);
 }
 
 static inline u16 read_word(u16 address) {
-    return (read_byte(address + 1) << 8) | read_byte(address);
+    return mmu_read_word(address);
 }
 
 static inline void write_byte(u16 address, u8 value) {
-    memory[address] = value;
+    mmu_write_byte(address, value);
 }
 
 static inline void write_word(u16 address, u16 value) {
-    write_byte(address, (u8)(value & 0xFF));
-    write_byte(address + 1, (u8)(value >> 8));
+    mmu_write_word(address, value);
 }
 
 // ============================================= //
@@ -610,16 +607,42 @@ static void execute_instruction(CPU *cpu, u8 opcode) {
         }
 
         case 0x27: {            // DAA "Decimal adjust accumulator"
+            // Adjust Accumulator for BCD-Usage
+            // Refer to z80 Documentation for further explanation
+
             bool was_add = IS_FLAG_CLEAR(cpu->F, FLAG_N);
             bool carry_set = IS_FLAG_SET(cpu->F, FLAG_C);
             bool halfcarry_set = IS_FLAG_SET(cpu->F, FLAG_H);
 
-            u8 lower_nibble = (cpu->A & 0x0F);
-            u8 upper_nibble = (cpu->A & 0xF0);
+            u8 correction = 0;
+            bool set_carry = false;
+
+            if (was_add) {
+                if (halfcarry_set || (cpu->A & 0x0F) > 9) {
+                    correction |= 0x06;
+                }
+                if (carry_set || cpu->A > 0x99) {
+                    correction |= 0x60;
+                    set_carry = true;
+                }
+                cpu->A += correction;
+            } else {
+                if (halfcarry_set) {
+                    correction |= 0x06;
+                }
+                if (carry_set) {
+                    correction |= 0x60;
+                }
+                cpu->A -= correction;
+                if (carry_set) set_carry = true;
+            }
 
             CLEAR_FLAG(cpu->F, FLAG_Z | FLAG_H | FLAG_C);
 
-            // TODO
+            if (cpu->A == 0)
+                SET_FLAG(cpu->F, FLAG_Z);
+            if (set_carry)
+                SET_FLAG(cpu->F, FLAG_C);
 
             cpu->cycles += 4;
             cpu->PC += 1;
@@ -1093,6 +1116,6 @@ static void execute_instruction(CPU *cpu, u8 opcode) {
 }
 
 void cpu_step(CPU *cpu) {
-    u8 opcode = memory[cpu->PC++];
+    u8 opcode = mmu_read_byte(cpu->PC);
     execute_instruction(cpu, opcode);
 }
