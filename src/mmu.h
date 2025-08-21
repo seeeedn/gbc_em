@@ -3,6 +3,12 @@
 
 #include "utils.h"
 
+// PPU MODES
+#define HBLANK          0x0
+#define VBLANK          0x1
+#define OAM_SCAN        0x2
+#define DRAWING         0x3
+
 // MEMORY START/END LOCATIONS
 #define BANK_0_START    0x0000
 #define BANK_0_END      0x3FFF
@@ -35,19 +41,40 @@
 #define HRAM_START      0xFF80
 #define HRAM_END        0xFFFE
 
-#define IE_ADDRESS      0xFFFF
-
 // FLAG/REG LOCATIONS
-#define VBK_INDEX       0xFF4F
-#define WBK_INDEX       0xFF70
+#define IE_ADDRESS      0xFFFF         // IE
 
-extern u8* rom_banks;                  // Full ROM, dynamically loaded
+// FLAG/REG LOCATIONS (relative to io_regs[])
+#define IF_ADDRESS      0x000F         // IF
+#define LCDC            0x0040         // LCD-Control
+#define STAT            0x0041
+#define SCY             0x0042
+#define SCX             0x0043         // Scroll registers
+#define LY              0x0044         // current scanline
+#define LYC             0x0045
+#define BGP             0x0047         // Background palette
+#define OBP0            0x0048
+#define OBP1            0x0049
+#define WY              0x004A
+#define WX              0x004B
+#define VBK_INDEX       0x004F
+#define WBK_INDEX       0x0070
+
+// INTERRUPTS
+#define INT_VBLANK      0x01
+#define INT_STAT        0x02
+#define INT_TIMER       0x04
+#define INT_SERIAL      0x08
+#define INT_JOYPAD      0x10
+
+extern u8 *rom_banks;                  // Full ROM, dynamically loaded
 extern u32 rom_size;
 extern u8 current_rom_bank;
+extern u8 current_ram_bank;
+extern u8 banking_mode;
 
 extern u8 current_vram_bank;           // 0 or 1
 extern u8 current_wram_bank;           // 1–7 (bank 1 by default)
-
 extern u8 vram[2][0x2000];             // 8 KB VRAM (GBC mode)
 extern u8 ext_ram[0x2000];             // 8 KB external RAM (cart RAM)
 
@@ -57,12 +84,17 @@ extern u8 wram_switchable[7][0x1000];  // 4 KB WRAM switchable banks (GBC mode)
 extern u8 oam[0xA0];                   // Sprite attribute table
 extern u8 io_regs[0x80];               // IO registers (0xFF00-0xFF7F)
 extern u8 hram[0x7F];                  // High RAM (0xFF80-0xFFFE)
-extern u8 interrupt_enable;            // IE register at 0xFFFF
+extern u8 interrupts_enabled;          // IE register at 0xFFFF
+
+void init_mmu();
 
 void mmu_write_byte(u16 address, u8 value);
 u8 mmu_read_byte(u16 address);
 
 void mmu_write_word(u16 address, u16 value);
 u16 mmu_read_word(u16 address);
+
+void request_interrupt(u8 intr);
+void enable_interrupt(u8 intr);
 
 #endif

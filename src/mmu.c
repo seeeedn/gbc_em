@@ -1,8 +1,10 @@
 #include "mmu.h"
 
-u8* rom_banks = 0;
+u8 *rom_banks = 0;
 u32 rom_size = 0;
 u8 current_rom_bank = 0;
+u8 current_ram_bank = 0;
+u8 banking_mode = 0;
 
 u8 current_vram_bank = 0;
 u8 current_wram_bank = 0;
@@ -18,11 +20,40 @@ u8 io_regs[0x80] = {0};
 u8 hram[0x7F] = {0};
 u8 interrupt_enable = 0;
 
+void init_mmu() {
+    io_regs[IF_ADDRESS] = 0xE1;
+    interrupt_enable = 0x00;
+
+    io_regs[LCDC] = 0x91;
+    io_regs[STAT] = 0x85;
+    io_regs[SCY] = 0x00;
+    io_regs[SCX] = 0x00;
+    io_regs[LY] = 0x00;
+    io_regs[LYC] =
+    io_regs[BGP] = 0xFC;
+    io_regs[OBP0] = 0xFF;
+    io_regs[OBP1] = 0xFF;
+    io_regs[WY] = 0x00;
+    io_regs[WX] = 0x00;
+
+    current_rom_bank = 1;   // Bank 1 by default
+    current_ram_bank = 0;
+    current_vram_bank = 0;
+    current_wram_bank = 1;  // Bank 1 by default
+}
+
 void mmu_write_byte(u16 address, u8 value) {
-    current_vram_bank = io_regs[VBK_INDEX - IO_REGS_START] & 0x1;
-    current_wram_bank = io_regs[WBK_INDEX - IO_REGS_START] & 0x7;
+    current_vram_bank = io_regs[VBK_INDEX] & 0x1;
+    current_wram_bank = io_regs[WBK_INDEX] & 0x7;
+
+    u8 current_ppu_mode = io_regs[STAT] & 0x03;
+
     if (current_wram_bank == 0)
         current_wram_bank = 1;
+    if (current_rom_bank == 0)
+        current_rom_bank = 1;
+
+    current_rom_bank = 1;
 
     if (address >= BANK_0_START && address <= BANK_0_END) {
         // TODO: ROM
@@ -31,7 +62,11 @@ void mmu_write_byte(u16 address, u8 value) {
         // TODO: ROM
     }
     else if (address >= VRAM_START && address <= VRAM_END) {
-        vram[current_vram_bank][address - VRAM_START] = value;
+        if (current_ppu_mode == DRAWING) {
+            return;             // writes are disabled
+        } else {
+            vram[0][address - VRAM_START] = value;
+        }
     }
     else if (address >= EXT_RAM_START && address <= EXT_RAM_END) {
         ext_ram[address - EXT_RAM_START] = value;
@@ -47,10 +82,14 @@ void mmu_write_byte(u16 address, u8 value) {
         mmu_write_byte(wram_address, value);
     }
     else if (address >= OAM_START && address <= OAM_END) {
-        oam[address - OAM_START] = value;
+        if (current_ppu_mode == OAM_SCAN || current_ppu_mode == DRAWING) {
+            return;
+        } else {
+            oam[address - OAM_START] = value;
+        }
     }
     else if (address >= UNUSED_START && address <= UNUSED_END) {
-        return;         // ignore writes to this area
+        return;                 // writes are disabled
     }
     else if (address >= IO_REGS_START && address <= IO_REGS_END) {
         io_regs[address - IO_REGS_START] = value;
@@ -62,26 +101,37 @@ void mmu_write_byte(u16 address, u8 value) {
         interrupt_enable = value;
     }
     else {
-        // Error handling
-        return;
+        return;     // Error handling
     }
 }
 
 u8 mmu_read_byte(u16 address) {
-    current_vram_bank = io_regs[VBK_INDEX - IO_REGS_START] & 0x1;
-    current_wram_bank = io_regs[WBK_INDEX - IO_REGS_START] & 0x7;
+    current_vram_bank = io_regs[VBK_INDEX] & 0x1;
+    current_wram_bank = io_regs[WBK_INDEX] & 0x7;
+
+    u8 current_ppu_mode = io_regs[STAT] & 0x03;
+
     if (current_wram_bank == 0)
         current_wram_bank = 1;
+    if (current_rom_bank == 0)
+        current_rom_bank = 1;
+
+    current_rom_bank = 1;
+
     u8 value = 0;
 
     if (address >= BANK_0_START && address <= BANK_0_END) {
-        // TODO: ROM
+        value = rom_banks[address];
     }
     else if (address >= BANK_N_START && address <= BANK_N_END) {
-        // TODO: ROM
+        value = rom_banks[(current_rom_bank * BANK_N_START) + (address - BANK_N_START)];
     }
     else if (address >= VRAM_START && address <= VRAM_END) {
-        value = vram[current_vram_bank][address - VRAM_START];
+        if (current_ppu_mode == DRAWING) {
+            value = 0xFF;       // VRAM inaccessible in this mode (read return garbage value)
+        } else {
+            value = vram[0][address - VRAM_START];
+        }
     }
     else if (address >= EXT_RAM_START && address <= EXT_RAM_END) {
         value = ext_ram[address - EXT_RAM_START];
@@ -97,7 +147,11 @@ u8 mmu_read_byte(u16 address) {
         value = mmu_read_byte(wram_address);
     }
     else if (address >= OAM_START && address <= OAM_END) {
-        value = oam[address - OAM_START];
+        if (current_ppu_mode == OAM_SCAN || current_ppu_mode == DRAWING) {
+            value = 0xFF;       // OAM inaccessible in these modes (read return garbage value)
+        } else {
+            value = oam[address - OAM_START];
+        }
     }
     else if (address >= UNUSED_START && address <= UNUSED_END) {
         u8 addr_nibble = address & 0x00F0;
@@ -110,7 +164,7 @@ u8 mmu_read_byte(u16 address) {
         value = hram[address - HRAM_START];
     }
     else if (address == IE_ADDRESS) {
-        value = interrupt_enable;
+        value = interrupts_enabled;
     }
     else {
         // Error handling
@@ -128,4 +182,16 @@ u16 mmu_read_word(u16 address) {
     value |= mmu_read_byte(address);
     value |= (mmu_read_byte(address + 1) << 8);
     return value;
+}
+
+void request_interrupt(u8 intr) {
+    io_regs[IF_ADDRESS] |= intr;
+}
+
+void enable_interrupt(u8 intr) {
+    interrupts_enabled |= intr;
+}
+
+void set_bit(u8 src, u8 bit) {
+    src |= (1 << bit);
 }

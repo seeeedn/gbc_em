@@ -58,16 +58,19 @@ typedef struct {
     u16 SP;                 // Stackpointer register
     u16 PC;                 // Program Counter
 
-    u64 cycles;             // CPU cycles passed
+    u64 total_cycles;       // CPU cycles passed since power on
 
-    bool ime;               // "Interrupt Master Enable"
     u8 ime_delay;           // CPU-steps until IME is enabled after EI-Instruction is being executed
+    bool ime;
 
     bool halted;
     bool stopped;
 } CPU;
 
 void init_cpu(CPU *cpu);
-void cpu_step(CPU *cpu);
+
+u8 execute_instruction(CPU *cpu, u8 opcode);
+u8 execute_cb_instruction(CPU *cpu, u8 cb_opcode);
+u8 handle_interrupt(CPU *cpu);
 
 #endif
