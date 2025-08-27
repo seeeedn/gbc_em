@@ -59,6 +59,8 @@
 #define WX              0x004B
 #define VBK_INDEX       0x004F
 #define WBK_INDEX       0x0070
+#define SB              0x0001
+#define SC              0x0002
 
 // INTERRUPTS
 #define INT_VBLANK      0x01
@@ -96,5 +98,7 @@ u16 mmu_read_word(u16 address);
 
 void request_interrupt(u8 intr);
 void enable_interrupt(u8 intr);
+
+bool is_bit_set(u8 src, u8 bit);
 
 #endif

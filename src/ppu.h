@@ -14,6 +14,5 @@ extern u32 framebuffer[160 * 144];
 extern bool ppu_frame_ready;
 
 void ppu_step(u8 cycles);
-void ppu_draw_line();
 
 #endif

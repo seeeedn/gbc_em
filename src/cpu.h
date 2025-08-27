@@ -15,9 +15,6 @@
 #define IS_FLAG_SET(reg, flag)      (((reg) & (flag)) != 0)
 #define IS_FLAG_CLEAR(reg, flag)    (((reg) & (flag)) == 0)
 
-#define IS_BIT_SET(reg, bit)        (((reg) & (bit)) != 0)
-#define IS_BIT_CLEAR(reg, bit)      (((reg) & (bit)) == 0)
-
 #define DEST_REG_BIT    0x38    // 0b00111000
 #define SOURCE_REG_BIT  0x07    // 0b00000111
 
@@ -70,7 +67,6 @@ typedef struct {
 void init_cpu(CPU *cpu);
 
 u8 execute_instruction(CPU *cpu, u8 opcode);
-u8 execute_cb_instruction(CPU *cpu, u8 cb_opcode);
 u8 handle_interrupt(CPU *cpu);
 
 #endif

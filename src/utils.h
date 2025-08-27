@@ -16,4 +16,7 @@ typedef int16_t i16;
 typedef int32_t i32;
 typedef int64_t i64;
 
+#define IS_BIT_SET(reg, bit)        (((reg) & (bit)) != 0)
+#define IS_BIT_CLEAR(reg, bit)      (((reg) & (bit)) == 0)
+
 #endif

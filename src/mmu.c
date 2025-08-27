@@ -1,4 +1,5 @@
 #include "mmu.h"
+#include <stdio.h>
 
 u8 *rom_banks = 0;
 u32 rom_size = 0;
@@ -18,18 +19,18 @@ u8 wram_switchable[7][0x1000] = {0};
 u8 oam[0xA0] = {0};
 u8 io_regs[0x80] = {0};
 u8 hram[0x7F] = {0};
-u8 interrupt_enable = 0;
+u8 interrupts_enabled = 0;
 
 void init_mmu() {
     io_regs[IF_ADDRESS] = 0xE1;
-    interrupt_enable = 0x00;
+    interrupts_enabled = 0x00;
 
     io_regs[LCDC] = 0x91;
     io_regs[STAT] = 0x85;
     io_regs[SCY] = 0x00;
     io_regs[SCX] = 0x00;
     io_regs[LY] = 0x00;
-    io_regs[LYC] =
+    io_regs[LYC] = 0x00;
     io_regs[BGP] = 0xFC;
     io_regs[OBP0] = 0xFF;
     io_regs[OBP1] = 0xFF;
@@ -43,6 +44,15 @@ void init_mmu() {
 }
 
 void mmu_write_byte(u16 address, u8 value) {
+
+    if (address == 0xFF02 && value == 0x81) {
+        printf("%c", io_regs[01]);
+        fflush(stdout);  // ensures output appears immediately
+    }
+
+    if (address == 0xFF46)
+        printf("DMA\n");
+
     current_vram_bank = io_regs[VBK_INDEX] & 0x1;
     current_wram_bank = io_regs[WBK_INDEX] & 0x7;
 
@@ -75,7 +85,7 @@ void mmu_write_byte(u16 address, u8 value) {
         wram0[address - WRAM_0_START] = value;
     }
     else if (address >= WRAM_S_START && address <= WRAM_S_END) {
-        wram_switchable[current_wram_bank][address - WRAM_S_START] = value;
+        wram_switchable[1][address - WRAM_S_START] = value;
     }
     else if (address >= ECHO_START && address <= ECHO_END) {
         u16 wram_address = address - 0x2000;
@@ -98,7 +108,7 @@ void mmu_write_byte(u16 address, u8 value) {
         hram[address - HRAM_START] = value;
     }
     else if (address == IE_ADDRESS) {
-        interrupt_enable = value;
+        interrupts_enabled = value;
     }
     else {
         return;     // Error handling
@@ -120,12 +130,12 @@ u8 mmu_read_byte(u16 address) {
 
     u8 value = 0;
 
-    if (address >= BANK_0_START && address <= BANK_0_END) {
+    if (address >= BANK_0_START && address <= BANK_N_END) {
         value = rom_banks[address];
     }
-    else if (address >= BANK_N_START && address <= BANK_N_END) {
-        value = rom_banks[(current_rom_bank * BANK_N_START) + (address - BANK_N_START)];
-    }
+   /*  else if (address >= BANK_N_START && address <= BANK_N_END) {
+        value = rom_banks[address];
+        }*/
     else if (address >= VRAM_START && address <= VRAM_END) {
         if (current_ppu_mode == DRAWING) {
             value = 0xFF;       // VRAM inaccessible in this mode (read return garbage value)
@@ -140,7 +150,7 @@ u8 mmu_read_byte(u16 address) {
         value = wram0[address - WRAM_0_START];
     }
     else if (address >= WRAM_S_START && address <= WRAM_S_END) {
-        value = wram_switchable[current_wram_bank][address - WRAM_S_START];
+        value = wram_switchable[1][address - WRAM_S_START];
     }
     else if (address >= ECHO_START && address <= ECHO_END) {
         u16 wram_address = address - 0x2000;
@@ -192,6 +202,7 @@ void enable_interrupt(u8 intr) {
     interrupts_enabled |= intr;
 }
 
-void set_bit(u8 src, u8 bit) {
-    src |= (1 << bit);
+bool is_bit_set(u8 src, u8 bit) {
+    bool ret = (src & (1 << bit)) ? true : false;
+    return ret;
 }
