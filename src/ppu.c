@@ -1,11 +1,11 @@
 #include "ppu.h"
 #include "mmu.h"
-#include <stdbool.h>
 
 #define SCREEN_HEIGHT   144
 #define SCREEN_WIDTH    160
+#define SCANLINE_MAX_SPRITES      10
 
-u32 colors[4] = {0xFFFFFFFF, 0xFFAAAAAA, 0xFF555555, 0xFF000000};       // grey-scale
+const u32 colors[4] = {0xFFFFFFFF, 0xFFAAAAAA, 0xFF555555, 0xFF000000};       // grey-scale
 u32 framebuffer[SCREEN_HEIGHT * SCREEN_WIDTH] = {0};
 u16 ppu_cycles = 0;
 bool ppu_frame_ready = false;
@@ -95,11 +95,11 @@ void ppu_step(u8 cycles) {
 }
 
 static void ppu_draw_scanline() {
-    if (is_bit_set(io_regs[LCDC], 1)) {     // render Object
-        draw_obj();
-    }
     if (is_bit_set(io_regs[LCDC], 0)) {     // render Background
         draw_bg();
+    }
+    if (is_bit_set(io_regs[LCDC], 1)) {     // render Object
+        draw_obj();
     }
 }
 
@@ -140,7 +140,7 @@ static void draw_obj() {
                 bool is_bg_white = framebuffer[(x + p) + SCREEN_WIDTH * ly] == colors[id];
 
                 if ((x + p) >= 0 && (x + p) < SCREEN_WIDTH) {
-                    if (!(color_id == 0) && ((attr >> 7 == 0) || (is_bg_white))) {
+                    if ((color_id != 0) && (((attr & 0x80) != 0) || (is_bg_white))) {
                         framebuffer[(x + p) + SCREEN_WIDTH * ly] = colors[color_id_pal];
                     }
                 }

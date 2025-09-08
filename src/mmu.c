@@ -103,6 +103,9 @@ void mmu_write_byte(u16 address, u8 value) {
     }
     else if (address >= IO_REGS_START && address <= IO_REGS_END) {
         io_regs[address - IO_REGS_START] = value;
+        if (address == 0xFF46) {
+            oam_dma(value);
+        }
     }
     else if (address >= HRAM_START && address <= HRAM_END) {
         hram[address - HRAM_START] = value;
@@ -192,6 +195,13 @@ u16 mmu_read_word(u16 address) {
     value |= mmu_read_byte(address);
     value |= (mmu_read_byte(address + 1) << 8);
     return value;
+}
+
+void oam_dma(u8 address) {
+    u16 base_addr = (address << 8);
+    for (int i = 0; i < 0xA0; i++) {
+        oam[i] = mmu_read_byte(base_addr);
+    }
 }
 
 void request_interrupt(u8 intr) {
