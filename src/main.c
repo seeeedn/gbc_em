@@ -1,5 +1,6 @@
 #include <SDL2/SDL.h>
 #include <stdio.h>
+#include <stdlib.h>
 #include "cpu.h"
 #include "mmu.h"
 #include "ppu.h"
@@ -9,7 +10,11 @@
 
 void load_rom(const char *path) {
     FILE *file = fopen(path, "rb");
-    if (!file) { printf("ROM not found!\n"); exit(1); }
+    if (!file) {
+        printf("ROM not found!\n");
+        exit(EXIT_FAILURE);
+    }
+
     fseek(file, 0, SEEK_END);
     rom_size = ftell(file);
     fseek(file, 0, SEEK_SET);
@@ -42,7 +47,7 @@ int main(int argc, char* argv[]) {
     SDL_RenderSetIntegerScale(renderer, SDL_TRUE);
     SDL_SetWindowSize(window, 640, 576);
 
-    load_rom("./dmg-acid2.gb");
+    load_rom(argv[1]);
 
     CPU cpu;
     init_cpu(&cpu);

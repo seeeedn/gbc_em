@@ -21,7 +21,7 @@ void ppu_step(u8 cycles) {
     if (!is_bit_set(io_regs[LCDC], 7)) {    // LCD is disabled
         ppu_cycles = 0;
         io_regs[LY] = 0;
-        io_regs[STAT] &= ~0x3;  // mode = HBLANK
+        io_regs[STAT] &= ~0x3;              // mode = HBLANK
         return;
     }
 
@@ -99,7 +99,10 @@ static void ppu_draw_scanline() {
         draw_bg();
     }
     if (is_bit_set(io_regs[LCDC], 1)) {     // render Object
-        draw_obj();
+        //draw_obj();
+    }
+    if (is_bit_set(io_regs[LCDC], 5)) {     // render Windows
+        //draw_win();
     }
 }
 
@@ -156,37 +159,33 @@ static void draw_bg() {
     u8 scx = io_regs[SCX];
     u8 scy = io_regs[SCY];
 
-    if (ly >= SCREEN_HEIGHT)
+    if (ly >= SCREEN_HEIGHT) {
         return;
+    }
 
     for (int x = 0; x < SCREEN_WIDTH; x++) {
         u16 bg_y = (ly + scy) & 0xFF;
         u16 bg_x = (x + scx) & 0xFF;
+        u16 tile_col = bg_x / 8;
+        u16 tile_row = bg_y / 8;
 
         u16 bg_tile_base = (is_bit_set(lcdc, 3)) ? 0x9C00 : 0x9800;
         u16 bg_tile_data = (is_bit_set(lcdc, 4)) ? 0x8000 : 0x8800;
         bool signed_idx = (!is_bit_set(lcdc, 4));
 
-        u16 tile_col = bg_x / 8;
-        u16 tile_row = bg_y / 8;
-        u16 tile_idx_addr = bg_tile_base + tile_row * 32 + tile_col;
-
+        u16 tile_idx_addr = bg_tile_base | (tile_row << 5) | tile_col;
         u8 tile_idx = vram[0][tile_idx_addr - VRAM_START];
-        if (signed_idx)
-            tile_idx = (i8)tile_idx;
 
-        u16 tile_addr;
         if (signed_idx) {
-            tile_addr = bg_tile_data + (tile_idx + 128) * 16;
-        } else {
-            tile_addr = bg_tile_data + tile_idx * 16;
+            tile_idx = (i8)(tile_idx + 128);
         }
+
+        u16 tile_addr = bg_tile_data + (tile_idx << 4) - VRAM_START;
 
         u8 line = bg_y % 8;
 
-        tile_addr -= VRAM_START;
-        u8 lo = vram[0][tile_addr + line * 2];
-        u8 hi = vram[0][tile_addr + line * 2 + 1];
+        u8 lo = vram[0][tile_addr | (line << 1)];
+        u8 hi = vram[0][tile_addr | (line << 1) | 1];
 
         int bit = 7 - (bg_x % 8);
         u8 color_id = ((hi >> bit) & 1) << 1 | ((lo >> bit) & 1);

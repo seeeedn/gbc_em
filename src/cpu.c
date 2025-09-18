@@ -134,7 +134,7 @@ static u8 execute_cb_instruction(CPU *cpu, u8 cb_opcode) {
     u8 *r8_lookup[] = { &cpu->B, &cpu->C, &cpu->D, &cpu->E, &cpu->H, &cpu->L, NULL, &cpu->A };
     u16 *r16_lookup[] = { &cpu->BC, &cpu->DE, &cpu->HL, &cpu->SP };
 
-    // pre calculate necessary variables
+    // pre calculate variables
     u8 target_bit_nr = (cb_opcode & DEST_REG_BIT) >> 3;
     u8 target_bit = (1 << target_bit_nr);
     u8 dest_reg_bit = cb_opcode & SOURCE_REG_BIT;

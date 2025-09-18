@@ -23,7 +23,7 @@ typedef struct {
     union {                 // 8-bit registers have to be swapped, because of little endian
         struct {
             u8 F;           // Flag register
-            u8 A;           // 8-bit Accumulator register
+            u8 A;           // Accumulator register
         };
         u16 AF;             // Special 16-bit register comprised out of the Flag register and the Accumulator register
     };

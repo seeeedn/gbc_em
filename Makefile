@@ -8,4 +8,4 @@ SRC :=  src/main.c \
 		src/ppu.c
 
 all:
-	$(CC) -Iinclude -Llib -o $(TARGET) $(SRC) -IC:/SDL2/include -LC:/SDL2/lib -lmingw32 -lSDL2main -lSDL2
+	$(CC) -Iinclude -Llib -o $(TARGET) $(SRC) -IC:/SDL2/include -LC:/SDL2/lib -lSDL2main -lSDL2
