@@ -2,7 +2,6 @@
 #define PPU_H
 
 #include "utils.h"
-#include "mmu.h"
 
 #define OAM_CYCLES 80
 #define VRAM_CYCLES 172

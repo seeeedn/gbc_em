@@ -4,6 +4,8 @@
 #include "cpu.h"
 #include "mmu.h"
 #include "ppu.h"
+#include "input.h"
+#include "timer.h"
 
 #define SCREEN_WIDTH 160
 #define SCREEN_HEIGHT 144
@@ -60,10 +62,17 @@ int main(int argc, char* argv[]) {
             if (event.type == SDL_QUIT) {
                 running = false;
             }
+
+            handle_input(&event);
         }
 
         u8 opcode = mmu_read_byte(cpu.PC);
         u8 cycles = execute_instruction(&cpu, opcode);
+
+        if (was_dma) {
+            cycles += 640;
+            was_dma = false;
+        }
 
         if (cpu.ime_delay > 0) {
             cpu.ime_delay--;
@@ -73,6 +82,8 @@ int main(int argc, char* argv[]) {
         }
 
         cycles += handle_interrupt(&cpu);
+
+        update_timer(cpu.total_cycles + cycles, cpu.stopped);
 
         ppu_step(cycles);
 

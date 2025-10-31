@@ -3,12 +3,6 @@
 
 #include "utils.h"
 
-// PPU MODES
-#define HBLANK          0x0
-#define VBLANK          0x1
-#define OAM_SCAN        0x2
-#define DRAWING         0x3
-
 // MEMORY START/END LOCATIONS
 #define BANK_0_START    0x0000
 #define BANK_0_END      0x3FFF
@@ -27,7 +21,7 @@
 #define OAM_START       0xFE00
 #define OAM_END         0xFE9F
 #define UNUSED_START    0xFEA0
-#define UNUSED_END      0xFEFE
+#define UNUSED_END      0xFEFF
 #define IO_REGS_START   0xFF00
 #define IO_REGS_END     0xFF7F
 #define HRAM_START      0xFF80
@@ -42,51 +36,28 @@
 #define HRAM_SIZE       0x7F
 
 // FLAG/REG LOCATIONS
-#define IE_ADDRESS      0xFFFF         // IE
+#define IE_ADDRESS      0xFFFF              // IE
 
-// FLAG/REG LOCATIONS (relative to io_regs[])
-#define IF_ADDRESS      0x000F         // IF
-#define LCDC            0x0040         // LCD-Control
-#define STAT            0x0041
-#define SCY             0x0042
-#define SCX             0x0043         // Scroll registers
-#define LY              0x0044         // current scanline
-#define LYC             0x0045
-#define BGP             0x0047         // Background palette
-#define OBP0            0x0048
-#define OBP1            0x0049
-#define WY              0x004A
-#define WX              0x004B
-#define VBK_INDEX       0x004F
-#define WBK_INDEX       0x0070
-#define SB              0x0001
-#define SC              0x0002
-
-// INTERRUPTS
-#define INT_VBLANK      0x01
-#define INT_STAT        0x02
-#define INT_TIMER       0x04
-#define INT_SERIAL      0x08
-#define INT_JOYPAD      0x10
-
-extern u8 *rom_banks;                  // Full ROM, dynamically loaded
+extern u8 *rom_banks;                       // Full ROM, dynamically loaded
 extern u32 rom_size;
 extern u8 current_rom_bank;
 extern u8 current_ram_bank;
 extern u8 banking_mode;
 
-extern u8 current_vram_bank;           // 0 or 1
-extern u8 current_wram_bank;           // 1–7 (bank 1 by default)
-extern u8 vram[2][VRAM_SIZE];             // 8 KB VRAM (GBC mode)
-extern u8 ext_ram[EXT_RAM_SIZE];             // 8 KB external RAM (cart RAM)
+extern u8 current_vram_bank;                // 0 or 1
+extern u8 current_wram_bank;                // 1–7 (bank 1 by default)
+extern u8 vram[2][VRAM_SIZE];               // 8 KB VRAM (GBC mode)
+extern u8 ext_ram[EXT_RAM_SIZE];            // 8 KB external RAM (cart RAM)
 
-extern u8 wram0[WRAM_SIZE];               // 4 KB WRAM bank 0
-extern u8 wram_switchable[7][WRAM_SIZE];  // 4 KB WRAM switchable banks (GBC mode)
+extern u8 wram0[WRAM_SIZE];                 // 4 KB WRAM bank 0
+extern u8 wram_switchable[7][WRAM_SIZE];    // 4 KB WRAM switchable banks (GBC mode)
 
-extern u8 oam[OAM_SIZE];                   // Sprite attribute table
-extern u8 io_regs[IO_SIZE];               // IO registers (0xFF00-0xFF7F)
+extern u8 oam[OAM_SIZE];                    // Sprite attribute table
+extern u8 io_regs[IO_SIZE];                 // IO registers (0xFF00-0xFF7F)
 extern u8 hram[HRAM_SIZE];                  // High RAM (0xFF80-0xFFFE)
-extern u8 interrupts_enabled;          // IE register at 0xFFFF
+extern u8 interrupts_enabled;               // IE register at 0xFFFF
+
+extern bool was_dma;
 
 void init_mmu();
 

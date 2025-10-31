@@ -2,7 +2,6 @@
 #define CPU_H
 
 #include "utils.h"
-#include "mmu.h"
 
 #define FLAG_Z (1 << 7)     // 7th bit of the F register
 #define FLAG_N (1 << 6)     // 6th bit of the F register
@@ -65,7 +64,6 @@ typedef struct {
 } CPU;
 
 void init_cpu(CPU *cpu);
-
 u8 execute_instruction(CPU *cpu, u8 opcode);
 u8 handle_interrupt(CPU *cpu);
 
