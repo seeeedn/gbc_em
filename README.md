@@ -7,13 +7,14 @@ This project is part of my effort to deepen my understanding of low-level system
 
 ## Features so far:
   - CPU: fully implemented
-  - PPU: basic rendering working
+  - PPU: rendering functional (not fully accurate at the moment)
   - MMU: mostly complete
-  - Runs and passes all Blargg test ROMs except the interrupt test (Joypad and Timer interrupts not yet implemented)
+  - Runs and passes all Blargg test ROMs
+  - I/O fully functional
+  - Basic Timer implemented
 
 ## Next steps:
+  - Implement Cartridge Memory Chips (MBC1, MBC2, MBC3)
+  - Add Gameboy Color features
   - Finalize PPU implementation
-  - Implement ROM load/store
-  - Add I/O functionality
-  - Add Timer
-  - Add Sound
+  - Implement APU (Audio Processing Unit)
