@@ -63,8 +63,10 @@ typedef struct {
     bool stopped;
 } CPU;
 
-void init_cpu(CPU *cpu);
-u8 execute_instruction(CPU *cpu, u8 opcode);
-u8 handle_interrupt(CPU *cpu);
+extern CPU cpu;
+
+void init_cpu();
+u8 execute_instruction(u8 opcode);
+u16 cpu_step();
 
 #endif

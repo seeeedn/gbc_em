@@ -37,6 +37,7 @@ typedef int64_t i64;
 #define SCX             0x0043              // Scroll registers
 #define LY              0x0044              // current scanline
 #define LYC             0x0045
+#define DMA             0x0046
 #define BGP             0x0047              // Background palette
 #define OBP0            0x0048
 #define OBP1            0x0049

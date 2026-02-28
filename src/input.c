@@ -1,29 +1,41 @@
 #include "input.h"
 #include "mmu.h"
 
-u8 joypad_input = 0x0F;
+Joypad joypad;
 
-void handle_input(SDL_Event *event) {
-    u8 joypad_upper = io_regs[JOYPAD] & 0xF0;
-    u8 joypad_input = 0x0F;
+u8 handle_input() {
+    u8 joyp = 0xCF;
 
-    if (event->type == SDL_KEYDOWN) {
-        if (event->key.keysym.sym == SDLK_RIGHT || event->key.keysym.sym == SDLK_x) {
-            joypad_input &= ~RIGHT_A;
-        }
-        if (event->key.keysym.sym == SDLK_LEFT || event->key.keysym.sym == SDLK_z) {
-            joypad_input &= ~LEFT_B;
-        }
-        if (event->key.keysym.sym == SDLK_UP || event->key.keysym.sym == SDLK_SPACE) {
-            joypad_input &= ~UP_SEL;
-        }
-        if (event->key.keysym.sym == SDLK_DOWN || event->key.keysym.sym == SDLK_RETURN) {
-            joypad_input &= ~DOWN_ST;
-        }
+    u8 select = read_mmio(JOYPAD) & 0x30;
+    u8 lower = joyp & 0x0F;
+
+    if (!(select & DPAD)) {
+        if (joypad.right)
+            lower &= ~RIGHT_A;
+        if (joypad.left)
+            lower &= ~LEFT_B;
+        if (joypad.up)
+            lower &= ~UP_SEL;
+        if (joypad.down)
+            lower &= ~DOWN_ST;
     }
 
-    if ((joypad_input & 0x0F) != 0x0F) {
+    if (!(select & BUTTON)) {
+        if (joypad.a)
+            lower &= ~RIGHT_A;
+        if (joypad.b)
+            lower &= ~LEFT_B;
+        if (joypad.select)
+            lower &= ~UP_SEL;
+        if (joypad.start)
+            lower &= ~DOWN_ST;
+    }
+
+    u8 new_joyp = (joyp & 0xF0) | lower;
+
+    if (new_joyp != joyp) {
         request_interrupt(INT_JOYPAD);
-        //printf("joyp intr\n");
     }
+
+    return lower;
 }

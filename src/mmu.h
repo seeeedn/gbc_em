@@ -39,10 +39,6 @@
 #define IE_ADDRESS      0xFFFF              // IE
 
 extern u8 *rom_banks;                       // Full ROM, dynamically loaded
-extern u32 rom_size;
-extern u8 current_rom_bank;
-extern u8 current_ram_bank;
-extern u8 banking_mode;
 
 extern u8 current_vram_bank;                // 0 or 1
 extern u8 current_wram_bank;                // 1–7 (bank 1 by default)
@@ -67,11 +63,12 @@ u8 mmu_read_byte(u16 address);
 void mmu_write_word(u16 address, u16 value);
 u16 mmu_read_word(u16 address);
 
-void oam_dma(u8 address);
+void write_mmio(u8 address, u8 value);
+u8 read_mmio(u8 address);
 
+void oam_dma(u8 address);
 void request_interrupt(u8 intr);
 void enable_interrupt(u8 intr);
-
 bool is_bit_set(u8 src, u8 bit);
 
 #endif

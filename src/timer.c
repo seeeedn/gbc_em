@@ -1,39 +1,35 @@
 #include "timer.h"
 #include "mmu.h"
 
-u8 passed_cycles = 0;
-const int timer_update_lut[] = { 256, 4, 16, 64 };
+u64 tima_counter = 0;
+u64 div_counter = 0;
+const int timer_update_lut[] = { 1024, 16, 64, 256 };       // TIMA update rates in CPU cycles
 
 void update_timer(u64 cycles, bool stopped) {
     const u8 tma = io_regs[TMA];
     const u8 tac = io_regs[TAC];
-    u16 tima = (u16)io_regs[TIMA];
-    const int update_rate = timer_update_lut[tac & 0x03];
+    const u16 update_rate = timer_update_lut[tac & 0x03];
 
-    bool update_div = false;
-    bool update_tima = false;
-
-    if (cycles / 64 > passed_cycles / 64) {
-        update_div = true;
+    if (!stopped) {
+        div_counter += cycles;
+        while (div_counter >= 64) {
+            div_counter -= 64;
+            io_regs[DIV]++;
+        }
     }
 
-    if (cycles / update_rate > passed_cycles / update_rate) {
-        update_tima = true;
-    }
+    tima_counter += cycles;
 
-    // DIV updates at a constant rate of every 64 Machine cycles (or 32 for CGB-mode)
-    if (!stopped && update_div) {
-        io_regs[DIV]++;
-    }
+    if (IS_BIT_SET(tac, 0x04)) {
+        while (tima_counter >= update_rate) {
+            tima_counter -= update_rate;
 
-    if (IS_BIT_SET(tac, 2) && update_tima) {
-        tima++;
+            if (io_regs[TIMA] == 0xFF) {
+                io_regs[TIMA] = tma;
+                request_interrupt(INT_TIMER);
+            } else {
+                io_regs[TIMA]++;
+            }
+        }
     }
-
-    if (tima > 0xFF) {
-        io_regs[TIMA] = tma;
-        request_interrupt(INT_TIMER);
-    }
-
-    passed_cycles = cycles;
 }

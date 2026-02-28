@@ -1,4 +1,4 @@
-#include <SDL2/SDL.h>
+#include <SDL3/SDL.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include "cpu.h"
@@ -6,6 +6,8 @@
 #include "ppu.h"
 #include "input.h"
 #include "timer.h"
+#include "interrupt.h"
+#include "debug.h"
 
 #define SCREEN_WIDTH 160
 #define SCREEN_HEIGHT 144
@@ -18,7 +20,7 @@ void load_rom(const char *path) {
     }
 
     fseek(file, 0, SEEK_END);
-    rom_size = ftell(file);
+    size_t rom_size = ftell(file);
     fseek(file, 0, SEEK_SET);
 
     rom_banks = malloc(rom_size);
@@ -26,82 +28,65 @@ void load_rom(const char *path) {
     fclose(file);
 }
 
-int main(int argc, char* argv[]) {
-    SDL_Init(SDL_INIT_VIDEO | SDL_INIT_AUDIO);
+int main(int argc, char *argv[]) {
+    if (argc < 1) {
+        return EXIT_FAILURE;
+    }
 
-    SDL_Window* window = SDL_CreateWindow(
-        "GBC Emu",
-        SDL_WINDOWPOS_CENTERED, SDL_WINDOWPOS_CENTERED,
-        SCREEN_WIDTH, SCREEN_HEIGHT,
-        SDL_WINDOW_SHOWN
-    );
-
-    SDL_Renderer* renderer = SDL_CreateRenderer(window, -1, SDL_RENDERER_ACCELERATED);
-    SDL_Texture* texture = SDL_CreateTexture(
-        renderer,
-        SDL_PIXELFORMAT_ARGB8888,
-        SDL_TEXTUREACCESS_STREAMING,
-        SCREEN_WIDTH,
-        SCREEN_HEIGHT
-    );
-
-    SDL_RenderSetLogicalSize(renderer, 160, 144);
-    SDL_RenderSetIntegerScale(renderer, SDL_TRUE);
-    SDL_SetWindowSize(window, 640, 576);
+    init_sdl("GBC Emu", SCREEN_WIDTH, SCREEN_HEIGHT);
 
     load_rom(argv[1]);
 
-    CPU cpu;
-    init_cpu(&cpu);
+    init_cpu();
     init_mmu();
 
     bool running = true;
     SDL_Event event;
+
     while (running) {
         while (SDL_PollEvent(&event)) {
-            if (event.type == SDL_QUIT) {
+            if (event.type == SDL_EVENT_QUIT) {
                 running = false;
             }
 
-            handle_input(&event);
-        }
+            if (event.type == SDL_EVENT_KEY_DOWN) {
+                switch (event.key.key) {
+                    case SDLK_RIGHT:  joypad.right  = true; break;
+                    case SDLK_LEFT:   joypad.left   = true; break;
+                    case SDLK_UP:     joypad.up     = true; break;
+                    case SDLK_DOWN:   joypad.down   = true; break;
 
-        u8 opcode = mmu_read_byte(cpu.PC);
-        u8 cycles = execute_instruction(&cpu, opcode);
+                    case SDLK_X:      joypad.a      = true; break;
+                    case SDLK_Z:      joypad.b      = true; break;
+                    case SDLK_SPACE:  joypad.select = true; break;
+                    case SDLK_RETURN: joypad.start  = true; break;
+                }
+            }
 
-        if (was_dma) {
-            cycles += 640;
-            was_dma = false;
-        }
+            if (event.type == SDL_EVENT_KEY_UP) {
+                switch (event.key.key) {
+                    case SDLK_RIGHT:  joypad.right  = false; break;
+                    case SDLK_LEFT:   joypad.left   = false; break;
+                    case SDLK_UP:     joypad.up     = false; break;
+                    case SDLK_DOWN:   joypad.down   = false; break;
 
-        if (cpu.ime_delay > 0) {
-            cpu.ime_delay--;
-            if (cpu.ime_delay == 0) {
-                cpu.ime = true;
+                    case SDLK_X:      joypad.a      = false; break;
+                    case SDLK_Z:      joypad.b      = false; break;
+                    case SDLK_SPACE:  joypad.select = false; break;
+                    case SDLK_RETURN: joypad.start  = false; break;
+                }
             }
         }
 
-        cycles += handle_interrupt(&cpu);
-
-        update_timer(cpu.total_cycles + cycles, cpu.stopped);
-
+        u16 cycles = cpu_step();
+        update_timer(cycles, cpu.stopped);
         ppu_step(cycles);
-
-        if (ppu_frame_ready) {
-            SDL_UpdateTexture(texture, NULL, framebuffer, SCREEN_WIDTH * sizeof(u32));
-
-            SDL_RenderClear(renderer);
-            SDL_RenderCopy(renderer, texture, NULL, NULL);
-            SDL_RenderPresent(renderer);
-
-            ppu_frame_ready = false;
-        }
     }
 
-    SDL_DestroyTexture(texture);
-    SDL_DestroyRenderer(renderer);
-    SDL_DestroyWindow(window);
+    SDL_DestroyTexture(render_util.texture);
+    SDL_DestroyRenderer(render_util.renderer);
+    SDL_DestroyWindow(render_util.window);
     SDL_Quit();
 
-    return 0;
+    return EXIT_SUCCESS;
 }

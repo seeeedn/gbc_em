@@ -1,97 +1,148 @@
 #include "ppu.h"
 #include "mmu.h"
+#include "debug.h"
+#include <stdlib.h>
 
-#define SCREEN_HEIGHT   144
-#define SCREEN_WIDTH    160
-#define SCANLINE_MAX_SPRITES      10
+#define SCREEN_HEIGHT           144
+#define SCREEN_WIDTH            160
+#define SCANLINE_MAX_SPRITES     10
 
-const u32 colors[4] = {0xFFFFFFFF, 0xFFAAAAAA, 0xFF555555, 0xFF000000};       // grey-scale
-u32 framebuffer[SCREEN_HEIGHT * SCREEN_WIDTH] = {0};
 u16 ppu_cycles = 0;
-bool ppu_frame_ready = false;
+const u32 colors[4] = { 0xFFFFFFFF, 0xFFAAAAAA, 0xFF555555, 0xFF000000 };       // grey-scale
+
+u32 framebuffer[SCREEN_HEIGHT * SCREEN_WIDTH] = {0};
+RenderInfo render_util;
+
+//enum PpuMode { HBLANK = 0, VBLANK = 1, OAM = 2, DRAWING = 3 };
+//static enum PpuMode mode;
+
+void init_sdl(char *win_name, int win_width, int win_height) {
+    SDL_Init(SDL_INIT_VIDEO | SDL_INIT_AUDIO);
+    
+    SDL_Window *window = SDL_CreateWindow(
+        win_name,
+        win_width,
+        win_height,
+        0
+    );
+    if (window == nullptr) {
+        fprintf(stderr, "Failed to initialize SDL-Window\n");
+        SDL_Quit();
+        exit(EXIT_FAILURE);
+    }
+
+    SDL_Renderer *renderer = SDL_CreateRenderer(window, NULL);
+    if (renderer == nullptr) {
+        fprintf(stderr, "Failed to initialize SDL-Renderer\n");
+        SDL_DestroyWindow(window);
+        SDL_Quit();
+        exit(EXIT_FAILURE);
+    }
+
+    SDL_Texture *texture = SDL_CreateTexture(
+        renderer,
+        SDL_PIXELFORMAT_ARGB8888,
+        SDL_TEXTUREACCESS_STREAMING,
+        win_width,
+        win_height
+    );
+    if (texture == nullptr) {
+        fprintf(stderr, "Failed to initialized SDL-Texture\n");
+        SDL_DestroyRenderer(renderer);
+        SDL_DestroyWindow(window);
+        SDL_Quit();
+        exit(EXIT_FAILURE);
+    }
+
+    SDL_SetRenderLogicalPresentation(
+        renderer, 
+        win_width,
+        win_height,
+        SDL_LOGICAL_PRESENTATION_INTEGER_SCALE
+    );
+    SDL_SetTextureScaleMode(texture, SDL_SCALEMODE_NEAREST);
+    SDL_SetWindowSize(window, win_width * 4, win_height * 4);
+
+    render_util.window = window;
+    render_util.renderer = renderer;
+    render_util.texture = texture;
+}
+
+void render() {
+    SDL_UpdateTexture(render_util.texture, NULL, framebuffer, SCREEN_WIDTH * sizeof(u32));
+
+    SDL_RenderClear(render_util.renderer);
+    SDL_RenderTexture(render_util.renderer, render_util.texture, NULL, NULL);
+    SDL_RenderPresent(render_util.renderer);
+}
 
 static void ppu_draw_scanline();
 static void draw_obj();
 static void draw_bg();
 static void draw_win();
 
-void ppu_step(u8 cycles) {
+void ppu_step(u16 cycles) {
     ppu_cycles += cycles;
-    u8 ppu_mode = (io_regs[STAT] & 0x3);
 
-    if (!is_bit_set(io_regs[LCDC], 7)) {    // LCD is disabled
+    // LCD off
+    if (!is_bit_set(io_regs[LCDC], 7)) {
         ppu_cycles = 0;
         io_regs[LY] = 0;
-        io_regs[STAT] &= ~0x3 | HBLANK;
+        io_regs[STAT] = (io_regs[STAT] & ~0x3) | HBLANK;
         return;
     }
 
-    switch (ppu_mode) {
-        case OAM_SCAN: {
-            if (ppu_cycles >= OAM_CYCLES) {
-                io_regs[STAT] = (io_regs[STAT] & ~0x3) | DRAWING;
-                ppu_cycles -= OAM_CYCLES;
-            }
-            break;
+    while (ppu_cycles >= 456) {
+        ppu_cycles -= 456;
+        io_regs[LY]++;
+
+        // Enter VBlank
+        if (io_regs[LY] == 144) {
+            io_regs[STAT] = (io_regs[STAT] & ~0x3) | VBLANK;
+            request_interrupt(INT_VBLANK);
+            render();
         }
-
-        case DRAWING: {
-            if (ppu_cycles >= VRAM_CYCLES) {
-                io_regs[STAT] = (io_regs[STAT] & ~0x3) | HBLANK;
-                ppu_draw_scanline();
-                ppu_cycles -= VRAM_CYCLES;
-
-                if (is_bit_set(io_regs[STAT], 3))
-                    request_interrupt(INT_STAT);
-            }
-            break;
-        }
-
-        case HBLANK: {
-            if (ppu_cycles >= HBLANK_CYCLES) {
-                io_regs[LY]++;
-                ppu_cycles -= HBLANK_CYCLES;
-
-                if (io_regs[LY] == SCREEN_HEIGHT) {
-                    io_regs[STAT] = (io_regs[STAT] & ~0x3) | VBLANK;
-                    request_interrupt(INT_VBLANK);
-                    if (is_bit_set(io_regs[STAT], 4))
-                        request_interrupt(INT_STAT);
-
-                    ppu_frame_ready = true;
-                } else {
-                    io_regs[STAT] = (io_regs[STAT] & ~0x3) | OAM_SCAN;
-
-                    if (is_bit_set(io_regs[STAT], 5))
-                        request_interrupt(INT_STAT);
-                }
-            }
-            break;
-        }
-
-        case VBLANK: {
-            if (ppu_cycles >= SCANLINE_CYCLES) {
-                io_regs[LY]++;
-                ppu_cycles -= SCANLINE_CYCLES;
-
-                if (io_regs[LY] > SCREEN_VBLANK_HEIGHT) {
-                    io_regs[STAT] = (io_regs[STAT] & ~0x3) | OAM_SCAN;
-                    io_regs[LY] = 0;
-
-                    if (is_bit_set(io_regs[STAT], 5))
-                        request_interrupt(INT_STAT);
-                }
-            }
-            break;
+        // End of VBlank
+        else if (io_regs[LY] > 153) {
+            io_regs[LY] = 0;
         }
     }
 
-    if (io_regs[LY] == io_regs[LYC]) {
-        io_regs[STAT] |= 0x4;
-        if (is_bit_set(io_regs[STAT], 6))
-            request_interrupt(INT_STAT);
+    u8 new_mode;
+    if (io_regs[LY] >= 144) {
+        new_mode = VBLANK;
+    } else if (ppu_cycles < 80) {
+        new_mode = OAM_SCAN;
+    } else if (ppu_cycles < 252) {
+        new_mode = DRAWING;
     } else {
-        io_regs[STAT] &= ~0x4;
+        new_mode = HBLANK;
+    }
+
+    u8 old_mode = io_regs[STAT] & 0x3;
+    io_regs[STAT] = (io_regs[STAT] & ~0x3) | new_mode;
+
+    // STAT interrupt
+    if (new_mode != old_mode) {
+        if ((new_mode == HBLANK && is_bit_set(io_regs[STAT], 3)) ||
+            (new_mode == VBLANK && is_bit_set(io_regs[STAT], 4)) ||
+            (new_mode == OAM_SCAN && is_bit_set(io_regs[STAT], 5))) {
+            request_interrupt(INT_STAT);
+        }
+
+        if (new_mode == HBLANK) {
+            ppu_draw_scanline();
+        }
+    }
+
+    // LY == LYC
+    if (io_regs[LY] == io_regs[LYC]) {
+        io_regs[STAT] |= 0x04;
+        if (is_bit_set(io_regs[STAT], 6)) {
+            request_interrupt(INT_STAT);
+        }
+    } else {
+        io_regs[STAT] &= ~0x04;
     }
 }
 
@@ -109,10 +160,10 @@ static void ppu_draw_scanline() {
 
 static void draw_obj() {
     u8 lcdc = io_regs[LCDC];
-    u8 ly = io_regs[LY];
+    u8 ly   = io_regs[LY];
     u8 obp0 = io_regs[OBP0];
     u8 obp1 = io_regs[OBP1];
-    u8 bgp = io_regs[BGP];
+    u8 bgp  = io_regs[BGP];
     int obj_in_scanline = 0;
 
     for (int i = 0; i < 0xA0; i += 4) {
@@ -127,12 +178,9 @@ static void draw_obj() {
             tile &= 0xFE;
         }
 
-        //printf("OAM[%d] rawY=%d calcY=%d ly=%d size=%d\n",
-        //i/4, oam[i], oam[i] - 16, ly, sprite_size);
+        //printf("OAM[%d] rawY=%d calcY=%d ly=%d size=%d\n", i/4, oam[i], oam[i] - 16, ly, sprite_size);
 
         if ((ly >= y) && (ly < (y + sprite_size))) {
-            printf("test1\n");
-
             u8 palette = is_bit_set(attr, 4) ? obp1 : obp0;
 
             int tile_row = is_bit_set(attr, 6) ? sprite_size - 1 - (ly - y) : (ly - y);
@@ -154,10 +202,8 @@ static void draw_obj() {
                 bool is_bg_white = framebuffer[(x + p) + SCREEN_WIDTH * ly] == colors[id];
 
                 if ((x + p) >= 0 && (x + p) < SCREEN_WIDTH) {
-                    printf("test2\n");
                     if ((color_id != 0) && (((attr & 0x80) == 0) || (is_bg_white))) {
                         framebuffer[(x + p) + SCREEN_WIDTH * ly] = colors[color_id_pal];
-                        printf("test3\n");
                     }
                 }
             }
