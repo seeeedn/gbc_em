@@ -7,7 +7,9 @@ SRC :=  src/main.c \
 	 	src/mmu.c \
 		src/ppu.c \
 		src/input.c \
-		src/timer.c
+		src/timer.c \
+		src/interrupt.c \
+		src/debug.c
 
 all:
-	$(CC) -Wall -Wextra -o $(TARGET) $(SRC) -lSDL2main -lSDL2
+	$(CC) -g -Wall -Wextra -o $(TARGET) $(SRC) -lSDL3
