@@ -12,9 +12,10 @@ This project is part of my effort to deepen my understanding of low-level system
   - Runs and passes all Blargg test ROMs
   - I/O fully functional
   - Basic Timer implemented
+  - Basic MBC1, MBC3 implemented
 
 ## Next steps:
-  - Implement Cartridge Memory Chips (MBC1, MBC2, MBC3)
+  - Implement Cartridge Memory Chips (MBC2)
   - Add Gameboy Color features
   - Finalize PPU implementation
   - Implement APU (Audio Processing Unit)
