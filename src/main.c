@@ -8,25 +8,11 @@
 #include "timer.h"
 #include "interrupt.h"
 #include "debug.h"
+#include "mbc3.h"
+//#include "mbc1.h"
 
 #define SCREEN_WIDTH 160
 #define SCREEN_HEIGHT 144
-
-void load_rom(const char *path) {
-    FILE *file = fopen(path, "rb");
-    if (!file) {
-        printf("ROM not found!\n");
-        exit(EXIT_FAILURE);
-    }
-
-    fseek(file, 0, SEEK_END);
-    size_t rom_size = ftell(file);
-    fseek(file, 0, SEEK_SET);
-
-    rom_banks = malloc(rom_size);
-    fread(rom_banks, 1, rom_size, file);
-    fclose(file);
-}
 
 int main(int argc, char *argv[]) {
     if (argc < 1) {

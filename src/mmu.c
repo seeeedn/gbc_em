@@ -1,15 +1,15 @@
 #include "mmu.h"
 #include "input.h"
 #include "timer.h"
+#include "mbc3.h"
+//#include "mbc1.h"
 
-//MMU mmu;
-
-u8 *rom_banks;
+/*u8 *rom_banks;
 u32 rom_size;
 u8 current_rom_bank;
 u8 current_ram_bank;
 u8 banking_mode;
-
+*/
 u8 current_vram_bank;
 u8 current_wram_bank;
 
@@ -44,8 +44,6 @@ void init_mmu() {
     io_regs[TAC] = 0xF8;
     io_regs[DMA] = 0xFF;
 
-    current_rom_bank = 1;   // Bank 1 by default
-    current_ram_bank = 0;
     current_vram_bank = 0;
     current_wram_bank = 1;  // Bank 1 by default
 }
@@ -83,16 +81,9 @@ void mmu_write_byte(u16 address, u8 value) {
     if (current_wram_bank == 0) {
         current_wram_bank = 1;
     }
-    if (current_rom_bank == 0) {
-        current_rom_bank = 1;
-    }
 
-    if (address <= BANK_0_END) {
-        // TODO: ROM
-    }
-
-    else if (address >= BANK_N_START && address <= BANK_N_END) {
-        // TODO: ROM
+    if (address <= BANK_N_END) {
+        write_mbc3(address, value);
     }
 
     else if (address <= VRAM_END) {
@@ -161,8 +152,6 @@ u8 mmu_read_byte(u16 address) {
 
     if (current_wram_bank == 0)
         current_wram_bank = 1;
-    if (current_rom_bank == 0)
-        current_rom_bank = 1;
 
     if (!valid_access(address)) {
         return 0xFF;
@@ -171,7 +160,7 @@ u8 mmu_read_byte(u16 address) {
     u8 value = 0;
 
     if (address <= BANK_N_END) {
-        value = rom_banks[address];
+        value = read_mbc3(address);
     }
 
     else if (address <= VRAM_END) {

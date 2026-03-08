@@ -9,7 +9,8 @@ SRC :=  src/main.c \
 		src/input.c \
 		src/timer.c \
 		src/interrupt.c \
-		src/debug.c
+		src/debug.c \
+		src/mbc3.c
 
 all:
 	$(CC) -g -Wall -Wextra -o $(TARGET) $(SRC) -lSDL3
