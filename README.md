@@ -12,7 +12,7 @@ This project is part of my effort to deepen my understanding of low-level system
   - Runs and passes all Blargg test ROMs
   - I/O fully functional
   - Basic Timer implemented
-  - Basic MBC1, MBC3 implemented
+  - MBC1, MBC3 implemented
 
 ## Next steps:
   - Implement Cartridge Memory Chips (MBC2)
