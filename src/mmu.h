@@ -38,12 +38,9 @@
 // FLAG/REG LOCATIONS
 #define IE_ADDRESS      0xFFFF              // IE
 
-extern u8 *rom_banks;                       // Full ROM, dynamically loaded
-
 extern u8 current_vram_bank;                // 0 or 1
 extern u8 current_wram_bank;                // 1–7 (bank 1 by default)
 extern u8 vram[2][VRAM_SIZE];               // 8 KB VRAM (GBC mode)
-extern u8 ext_ram[EXT_RAM_SIZE];            // 8 KB external RAM (cart RAM)
 
 extern u8 wram0[WRAM_SIZE];                 // 4 KB WRAM bank 0
 extern u8 wram_switchable[7][WRAM_SIZE];    // 4 KB WRAM switchable banks (GBC mode)

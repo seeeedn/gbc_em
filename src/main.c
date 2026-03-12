@@ -8,8 +8,7 @@
 #include "timer.h"
 #include "interrupt.h"
 #include "debug.h"
-#include "mbc3.h"
-//#include "mbc1.h"
+#include "cartridge.h"
 
 #define SCREEN_WIDTH 160
 #define SCREEN_HEIGHT 144
@@ -28,6 +27,9 @@ int main(int argc, char *argv[]) {
 
     bool running = true;
     SDL_Event event;
+    u64 total_cycles = 0;
+    Uint64 start = SDL_GetPerformanceCounter();
+    const double FRAME_TIME = 1.0 / 59.7275;
 
     while (running) {
         while (SDL_PollEvent(&event)) {
@@ -67,6 +69,19 @@ int main(int argc, char *argv[]) {
         u16 cycles = cpu_step();
         update_timer(cycles, cpu.stopped);
         ppu_step(cycles);
+
+        total_cycles += cycles;
+        if (total_cycles >= 70224) {
+            total_cycles -= 70224;
+            
+            Uint64 end = SDL_GetPerformanceCounter();
+            double delta = (double)(end - start) / (double)SDL_GetPerformanceFrequency();
+
+            if (delta < FRAME_TIME) {
+                SDL_Delay((Uint32)((FRAME_TIME - delta) * 1000.0));
+            }
+            start = SDL_GetPerformanceCounter();
+        }
     }
 
     SDL_DestroyTexture(render_util.texture);

@@ -1,20 +1,12 @@
 #include "mmu.h"
 #include "input.h"
 #include "timer.h"
-#include "mbc3.h"
-//#include "mbc1.h"
+#include "cartridge.h"
 
-/*u8 *rom_banks;
-u32 rom_size;
-u8 current_rom_bank;
-u8 current_ram_bank;
-u8 banking_mode;
-*/
 u8 current_vram_bank;
 u8 current_wram_bank;
 
 u8 vram[2][0x2000];
-u8 ext_ram[0x2000] = {0xFF};
 
 u8 wram0[0x1000];
 u8 wram_switchable[7][0x1000];
@@ -83,7 +75,7 @@ void mmu_write_byte(u16 address, u8 value) {
     }
 
     if (address <= BANK_N_END) {
-        write_mbc3(address, value);
+        write_cart(address, value);
     }
 
     else if (address <= VRAM_END) {
@@ -91,7 +83,7 @@ void mmu_write_byte(u16 address, u8 value) {
     }
 
     else if (address <= EXT_RAM_END) {
-        ext_ram[address - EXT_RAM_START] = value;
+        write_cart(address, value);
     }
 
     else if (address <= WRAM_0_END) {
@@ -160,7 +152,7 @@ u8 mmu_read_byte(u16 address) {
     u8 value = 0;
 
     if (address <= BANK_N_END) {
-        value = read_mbc3(address);
+        value = read_cart(address);
     }
 
     else if (address <= VRAM_END) {
@@ -168,7 +160,7 @@ u8 mmu_read_byte(u16 address) {
     }
 
     else if (address <= EXT_RAM_END) {
-        value = ext_ram[address - EXT_RAM_START];
+        value = read_cart(address); 
     }
 
     else if (address <= WRAM_0_END) {

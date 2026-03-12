@@ -1,49 +1,10 @@
 #include "mbc3.h"
 
-//u8 rom[0x4000 * 0x80] = {0};
-u8 *rom = NULL;
-u8 ram_bank_n[0x2000 * 8] = {0};        // RAM Bank 00-07
-u8 rtc_register[5];                     // RTC register
+u8 last_latch_write;
 
-bool ram_rtc_enable = false;
-u8 rom_idx = 1;                         // Current ROM Bank
-u8 ram_idx = 0;                         // Current RAM Bank or RTC register
-u8 last_latch_write = 0;
-
-int rom_size;
-u16 num_rom_banks = 0;
-u16 num_ram_banks = 3;
-
-struct tm *ptime;
-time_t t;
-
-
-bool load_rom(const char *path) {
-    FILE *f = fopen(path, "rb");
-    if (!f) 
-        return false;
-
-    fseek(f, 0, SEEK_END);
-    rom_size = ftell(f);
-    rewind(f);
-
-    rom = malloc(rom_size);
-    if (!rom) {
-        fclose(f);
-        return false;
-    }
-
-    fread(rom, 1, rom_size, f);
-    fclose(f);
-
-    num_rom_banks = rom_size / ROM_BANK_SIZE;
-
-    return true;
-}
-
-void write_mbc3(u16 address, u8 value) {
+void write_mbc3(Cartridge *cart, u16 address, u8 value) {
     if (address <= 0x1FFF) {
-        ram_rtc_enable = (value == 0x0A) ? true : false; 
+        cart->ram_enable = (value == 0x0A) ? true : false; 
         return;
     }
 
@@ -52,67 +13,106 @@ void write_mbc3(u16 address, u8 value) {
         if (value == 0x00) {
             value = 1;
         }
-        rom_idx = value;
+        cart->rom_bank = value;
         return;
     }
 
     if (address <= 0x5FFF) {
-        ram_idx = value;
+        cart->ram_bank = value;
         return;
     }
 
-    if (address <= 0x7FFF) {
+    if (address <= 0x7FFF && cart->timer) {
         if (last_latch_write == 0x00 && value == 0x01) {
-            t = time(NULL);
-            ptime = localtime(&t);
+            time_t t = time(NULL);
+            time_t delta_t = t - cart->rtc->last_update;
 
-            rtc_register[0] = ptime->tm_sec;
-            rtc_register[1] = ptime->tm_min;
-            rtc_register[2] = ptime->tm_hour;
+            cart->rtc->seconds = delta_t % 60;
 
-            int days = ptime->tm_yday;
-            rtc_register[3] = days & 0xFF;
-            rtc_register[4] = (days >> 8) & 0x01;
+            time_t min = t / 60;
+            cart->rtc->minutes = min % 60;
 
-            if (days & 0x100)
-                rtc_register[4] |= 0x01;
+            time_t hr = min / 60;
+            cart->rtc->hours = hr % 24;
 
-            if (days > 511)
-                rtc_register[4] |= 0x80;
+            time_t day = hr / 24;
+            cart->rtc->day_counter_low = day % 31;
+
+            if (day >= 256) {
+                cart->rtc->day_counter_high |= 0x01; 
+            }
+            if (day > 511) {
+                cart->rtc->day_counter_high |= 0x80;
+            }
+            
+            cart->rtc->last_update = t;
         }
-
         last_latch_write = value;
         return;
     }
 
-    if (address <= 0xBFFF && ram_rtc_enable) {
-        if (ram_idx <= num_ram_banks) {
-            ram_bank_n[RAM_BANK_SIZE * ram_idx + (address - 0xA000)] = value;
+    if (address <= 0xBFFF && cart->ram_enable) {
+        if (cart->ram_bank < cart->num_ram_banks) {
+            cart->ram[RAM_BANK_SIZE * cart->ram_bank + (address - 0xA000)] = value;
             return;
         }
-        if (ram_idx >= 0x08 && ram_idx <= 0x0C) {
-            rtc_register[ram_idx - 0x08] = value;
-            return;
+        switch (cart->ram_bank) {
+            case 0x08:
+                cart->rtc->seconds = value;
+                break;
+
+            case 0x09:
+                cart->rtc->minutes = value;
+                break;
+
+            case 0x0A:
+                cart->rtc->hours = value;
+                break;
+
+            case 0x0B:
+                cart->rtc->day_counter_low = value;
+                break;
+
+            case 0x0C:
+                cart->rtc->day_counter_high = value;
+                break;
+
+            default:
         }
     }
 }
 
-u8 read_mbc3(u16 address) {
+u8 read_mbc3(Cartridge *cart, u16 address) {
     if (address <= 0x3FFF) {
-        return rom[address];
+        return cart->rom[address];
     }
 
     if (address <= 0x7FFF) {
-        u8 bank = rom_idx % num_rom_banks;
-        return rom[ROM_BANK_SIZE * bank + (address - 0x4000)];
+        u8 bank = cart->rom_bank % cart->num_rom_banks;
+        return cart->rom[ROM_BANK_SIZE * bank + (address - 0x4000)];
     }
 
-    if (address <= 0xBFFF && ram_rtc_enable) {
-        if (ram_idx <= num_ram_banks) {
-            return ram_bank_n[RAM_BANK_SIZE * ram_idx + (address - 0xA000)];
+    if (address <= 0xBFFF && cart->ram_enable) {
+        if (cart->ram_bank < cart->num_ram_banks) {
+            return cart->ram[RAM_BANK_SIZE * cart->ram_bank + (address - 0xA000)];
         }
-        if (ram_idx >= 0x08 && ram_idx <= 0x0C) {
-            return rtc_register[ram_idx - 0x08];
+        switch (cart->ram_bank) {
+            case 0x08:
+                return cart->rtc->seconds;
+
+            case 0x09:
+                return cart->rtc->minutes;
+
+            case 0x0A:
+                return cart->rtc->hours;
+
+            case 0x0B:
+                return cart->rtc->day_counter_low;
+
+            case 0x0C:
+                return cart->rtc->day_counter_high;
+
+            default:
         }
     }
 

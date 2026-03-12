@@ -13,9 +13,6 @@ const u32 colors[4] = { 0xFFFFFFFF, 0xFFAAAAAA, 0xFF555555, 0xFF000000 };       
 u32 framebuffer[SCREEN_HEIGHT * SCREEN_WIDTH] = {0};
 RenderInfo render_util;
 
-//enum PpuMode { HBLANK = 0, VBLANK = 1, OAM = 2, DRAWING = 3 };
-//static enum PpuMode mode;
-
 void init_sdl(char *win_name, int win_width, int win_height) {
     SDL_Init(SDL_INIT_VIDEO | SDL_INIT_AUDIO);
     
@@ -178,8 +175,6 @@ static void draw_obj() {
             tile &= 0xFE;
         }
 
-        //printf("OAM[%d] rawY=%d calcY=%d ly=%d size=%d\n", i/4, oam[i], oam[i] - 16, ly, sprite_size);
-
         if ((ly >= y) && (ly < (y + sprite_size))) {
             u8 palette = is_bit_set(attr, 4) ? obp1 : obp0;
 
@@ -264,8 +259,8 @@ static void draw_win() {
     u8 lcdc = io_regs[LCDC];
     u8 bgp  = io_regs[BGP];
     u8 ly   = io_regs[LY];
-    u8 scy  = io_regs[SCY];
-    u8 scx  = io_regs[SCX];
+    //u8 scy  = io_regs[SCY];
+    //u8 scx  = io_regs[SCX];
     u8 wy   = io_regs[WY];
     int wx   = io_regs[WX] - 7;
 
